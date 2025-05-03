@@ -1,0 +1,179 @@
+/* Theme Fix CSS */
+
+/* Ensure theme toggle button has proper styles and feedback */
+.header__theme-toggle {
+  cursor: pointer !important;
+  z-index: 100;
+  position: relative;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.header__theme-toggle:hover {
+  transform: scale(1.1);
+}
+
+.header__theme-toggle:active {
+  transform: scale(0.95);
+}
+
+/* Fix for modals */
+.modal.active {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 9999;
+}
+
+/* Improve dark mode contrast */
+[data-theme="dark"] {
+  --dark-bg-primary: #121212;
+  --dark-bg-secondary: #1e1e1e;
+  --dark-bg-accent: #2c2c2c;
+  --dark-text-primary: #ffffff;
+}
+
+/* Ensure theme transitions work smoothly */
+.theme-transition * {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease !important;
+}
+
+/* Make sure all buttons have cursor pointer */
+button, 
+.btn, 
+.header__nav-link, 
+.header__theme-toggle,
+.chat-input__voice,
+.chat-input__submit,
+.chat-details__close,
+.header__user-profile,
+.login-form__social-btn {
+  cursor: pointer !important;
+}
+
+/* Add active states */
+button:active,
+.btn:active, 
+.header__theme-toggle:active,
+.chat-input__voice:active,
+.chat-input__submit:active {
+  transform: scale(0.95) !important;
+}
+
+/* Fix Safari background issues */
+html[data-theme="dark"] {
+  background-color: var(--dark-bg-primary);
+}
+
+html[data-theme="light"] {
+  background-color: var(--bg-primary);
+}
+
+/* Add more visible button hover effects */
+.btn:hover, 
+.header__theme-toggle:hover,
+.chat-input__voice:hover,
+.chat-input__submit:hover {
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] .btn:hover,
+[data-theme="dark"] .header__theme-toggle:hover,
+[data-theme="dark"] .chat-input__voice:hover,
+[data-theme="dark"] .chat-input__submit:hover {
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Debug hover styles for development */
+.debug-hover-styles button:hover,
+.debug-hover-styles .btn:hover,
+.debug-hover-styles .header__theme-toggle:hover {
+  outline: 2px solid red !important;
+}
+
+/* Better debug */
+#debug-info {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px;
+  border-radius: 5px;
+  font-family: monospace;
+  font-size: 12px;
+  z-index: 9999;
+  display: none;
+}
+
+.show-debug #debug-info {
+  display: block;
+}
+
+/* Add typing indicator styles */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 0;
+}
+
+.typing-indicator span {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  opacity: 0.7;
+  animation: typing-dot 1.4s infinite both;
+}
+
+.typing-indicator span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing-dot {
+  0% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+}
+
+.chat-message--typing .chat-message__content {
+  min-width: 60px;
+  min-height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Voice feedback animation */
+.voice-feedback__bar {
+  width: 4px;
+  background-color: var(--primary-color);
+  height: 10px;
+  transition: height 0.1s ease;
+}
+
+.voice-feedback__visualizer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  height: 40px;
+} 

@@ -1,0 +1,90 @@
+{
+  "name": "staycrest",
+  "version": "1.0.0",
+  "description": "AI-Powered Hotel Discovery & Loyalty Aggregation Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "dev:docker": "docker-compose -f docker-compose-dev.yml up",
+    "test": "jest --coverage",
+    "lint": "eslint .",
+    "build": "webpack --mode production",
+    "db:init": "node server/database/init_db.js",
+    "db:migrate:up": "node server/database/migrate.js up",
+    "db:migrate:down": "node server/database/migrate.js down",
+    "seed:hotel-data": "node server/database/seeds/hotel_data_seed.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/staycrest.git"
+  },
+  "keywords": [
+    "ai",
+    "hotel",
+    "loyalty",
+    "voice",
+    "agent"
+  ],
+  "author": "StayCrest Team",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/yourusername/staycrest/issues"
+  },
+  "homepage": "https://github.com/yourusername/staycrest#readme",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "connect-redis": "^7.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.3",
+    "express-session": "^1.17.3",
+    "helmet": "^7.0.0",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "node-cache": "^5.1.2",
+    "openai": "^4.14.2",
+    "passport": "^0.6.0",
+    "passport-facebook": "^3.0.0",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-jwt": "^4.0.1",
+    "passport-local": "^1.0.0",
+    "pg": "^8.11.3",
+    "pgvector": "^0.1.7",
+    "puppeteer": "^21.3.8",
+    "redis": "^4.6.10",
+    "socket.io": "^4.7.2",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0",
+    "hnswlib-node": "^1.4.2",
+    "langchain": "^0.1.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.2",
+    "@babel/preset-env": "^7.23.2",
+    "babel-loader": "^9.1.3",
+    "css-loader": "^6.8.1",
+    "css-minimizer-webpack-plugin": "^5.0.1",
+    "eslint": "^8.52.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-jest": "^27.6.0",
+    "html-webpack-plugin": "^5.5.3",
+    "jest": "^29.7.0",
+    "mini-css-extract-plugin": "^2.7.6",
+    "nodemon": "^3.0.1",
+    "style-loader": "^3.3.3",
+    "supertest": "^6.3.3",
+    "terser-webpack-plugin": "^5.3.9",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  }
+} 

@@ -1,0 +1,461 @@
+/* css/components/voice-controls.css */
+
+/* Voice Button */
+.voice-button {
+    padding: var(--spacing-md);
+    border: 2px solid var(--primary-color);
+    border-radius: var(--radius-md);
+    background-color: var(--bg-secondary);
+    color: var(--primary-color);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    user-select: none;
+    min-width: 120px;
+  }
+  
+  .voice-button:hover {
+    background-color: var(--primary-color);
+    color: var(--text-inverse);
+  }
+  
+  .voice-button:active,
+  .voice-button.recording {
+    background-color: var(--error-color);
+    border-color: var(--error-color);
+    color: var(--text-inverse);
+    transform: scale(0.98);
+  }
+  
+  .voice-button.recording {
+    animation: pulse-red 1.5s infinite;
+  }
+  
+  @keyframes pulse-red {
+    0% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+    70% {
+      box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+  }
+  
+  .voice-button .voice-icon {
+    font-size: 1.125rem;
+  }
+  
+  .voice-button .voice-text {
+    font-size: 0.875rem;
+  }
+  
+  /* Voice Visualizer */
+  .voice-visualizer {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    box-shadow: var(--shadow-md);
+    margin-bottom: var(--spacing-sm);
+  }
+  
+  .wave-bar {
+    width: 3px;
+    height: 10px;
+    background-color: var(--primary-color);
+    border-radius: 2px;
+    transition: height var(--transition-fast);
+  }
+  
+  .wave-text {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-left: var(--spacing-sm);
+  }
+  
+  /* Voice Status */
+  .chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md);
+    background-color: var(--bg-primary);
+    border-bottom: 1px solid var(--border-primary);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+  
+  .voice-status {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+  
+  .voice-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--success-color);
+    transition: background-color var(--transition-fast);
+  }
+  
+  .voice-status.listening .voice-indicator {
+    background-color: var(--error-color);
+    animation: pulse-red 1s infinite;
+  }
+  
+  .voice-status.error .voice-indicator {
+    background-color: var(--warning-color);
+  }
+  
+  .voice-status-text {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+  
+  .toggle-speech {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+  }
+  
+  .toggle-speech:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-accent);
+  }
+  
+  .toggle-speech.muted .speech-icon {
+    text-decoration: line-through;
+  }
+  
+  /* Voice Feedback Panel */
+  .voice-feedback {
+    position: fixed;
+    bottom: 150px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+    max-width: 500px;
+    width: 90%;
+    animation: slideUp var(--transition-normal) ease-out;
+  }
+  
+  @keyframes slideUp {
+    from {
+      transform: translate(-50%, 100%);
+      opacity: 0;
+    }
+    to {
+      transform: translate(-50%, 0);
+      opacity: 1;
+    }
+  }
+  
+  .feedback-content {
+    text-align: center;
+  }
+  
+  .feedback-icon {
+    font-size: 2rem;
+    margin-bottom: var(--spacing-sm);
+  }
+  
+  .feedback-text {
+    font-size: 1rem;
+    margin-bottom: var(--spacing-md);
+    color: var(--text-primary);
+  }
+  
+  .feedback-actions {
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-sm);
+  }
+  
+  .feedback-action {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  
+  .feedback-action.confirm {
+    background-color: var(--success-color);
+    border-color: var(--success-color);
+    color: var(--text-inverse);
+  }
+  
+  .feedback-action:hover:not(.confirm) {
+    background-color: var(--bg-accent);
+    border-color: var(--primary-color);
+  }
+  
+  /* Voice Settings Button */
+  .voice-settings-button {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-primary);
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+    position: relative;
+  }
+  
+  .voice-settings-button:hover {
+    background-color: var(--bg-accent);
+    border-color: var(--primary-color);
+  }
+  
+  .voice-settings-button:active {
+    transform: scale(0.98);
+  }
+  
+  .voice-settings-icon {
+    font-size: 1.125rem;
+  }
+  
+  /* Tutorial Overlay */
+  .tutorial-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: fadeIn var(--transition-normal) ease-out;
+  }
+  
+  .tutorial-content {
+    background-color: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 90%;
+    max-width: 600px;
+    overflow: hidden;
+  }
+  
+  .tutorial-header {
+    padding: var(--spacing-lg);
+    background-color: var(--primary-color);
+    color: var(--text-inverse);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .tutorial-header h2 {
+    font-size: 1.5rem;
+    margin: 0;
+  }
+  
+  .close-tutorial {
+    background: none;
+    border: none;
+    color: var(--text-inverse);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: var(--spacing-sm);
+    line-height: 1;
+  }
+  
+  .tutorial-body {
+    padding: var(--spacing-lg);
+  }
+  
+  .tutorial-step {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  .tutorial-step:last-child {
+    margin-bottom: 0;
+  }
+  
+  .step-icon {
+    font-size: 2rem;
+    flex-shrink: 0;
+  }
+  
+  .step-content h3 {
+    font-size: 1.125rem;
+    margin-bottom: var(--spacing-xs);
+  }
+  
+  .step-content p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  
+  .tutorial-footer {
+    padding: var(--spacing-lg);
+    background-color: var(--bg-secondary);
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-md);
+  }
+  
+  .tutorial-action {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+  }
+  
+  .tutorial-action:not(.secondary) {
+    background-color: var(--primary-color);
+    color: var(--text-inverse);
+  }
+  
+  .tutorial-action.secondary {
+    background-color: transparent;
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+  }
+  
+  .tutorial-action:hover:not(.secondary) {
+    background-color: hsl(from var(--primary-color) h s calc(l - 5));
+  }
+  
+  .tutorial-action.secondary:hover {
+    background-color: var(--bg-accent);
+  }
+  
+  /* Voice Modal Styles */
+  #voice-modal .settings-section {
+    margin-bottom: var(--spacing-xl);
+  }
+  
+  #voice-modal .range-input {
+    width: 100%;
+    margin-top: var(--spacing-sm);
+  }
+  
+  #voice-modal .range-value {
+    display: inline-block;
+    margin-left: var(--spacing-sm);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+  
+  /* Voice Provider Specific Styles */
+  .provider-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-left: var(--spacing-sm);
+  }
+  
+  .provider-badge.free {
+    background-color: var(--success-color);
+    color: white;
+  }
+  
+  .provider-badge.premium {
+    background-color: var(--primary-color);
+    color: white;
+  }
+  
+  .provider-badge.local {
+    background-color: var(--secondary-color);
+    color: white;
+  }
+  
+  /* Quick Settings */
+  .quick-settings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-xl);
+  }
+  
+  .quick-setting {
+    padding: var(--spacing-md);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .quick-setting label {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  
+  /* Responsive Voice Controls */
+  @media (max-width: 640px) {
+    .voice-button {
+      min-width: auto;
+      padding: var(--spacing-sm);
+    }
+    
+    .voice-button .voice-text {
+      display: none;
+    }
+    
+    .voice-feedback {
+      bottom: 120px;
+    }
+    
+    .tutorial-step {
+      flex-direction: column;
+      text-align: center;
+    }
+    
+    .step-icon {
+      margin-bottom: var(--spacing-sm);
+    }
+  }
+  
+  /* Accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    .voice-button.recording {
+      animation: none;
+    }
+    
+    .wave-bar {
+      transition: none;
+    }
+    
+    .tutorial-overlay {
+      animation: none;
+    }
+  }

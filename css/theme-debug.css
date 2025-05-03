@@ -1,0 +1,187 @@
+/* Theme Debug CSS - Focused specifically on making theme toggle work */
+
+/* Theme classes and variables */
+:root {
+  /* Core theme colors that will be overridden in dark mode */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --border-primary: #e5e7eb;
+  --primary-color: #6366f1;
+  
+  /* Animation speeds */
+  --theme-transition-speed: 0.3s;
+}
+
+/* Dark theme variables */
+[data-theme="dark"] {
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --text-primary: #f9fafb;
+  --text-secondary: #e5e7eb;
+  --border-primary: #374151;
+  --primary-color: #8183f4;
+}
+
+/* Dark theme variables - duplicate using .dark-mode class for compatibility */
+.dark-mode {
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --text-primary: #f9fafb;
+  --text-secondary: #e5e7eb;
+  --border-primary: #374151;
+  --primary-color: #8183f4;
+}
+
+/* Apply base theme to body */
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color var(--theme-transition-speed) ease,
+              color var(--theme-transition-speed) ease;
+}
+
+/* Debug visually highlighted theme toggle */
+button#themeToggle {
+  position: relative;
+  width: 50px !important;
+  height: 50px !important;
+  border-radius: 50% !important;
+  border: 2px solid var(--primary-color) !important;
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  cursor: pointer !important;
+  outline: none !important;
+  
+  /* Box shadow for emphasis */
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3) !important;
+  
+  /* Add pulsing animation */
+  animation: pulse-theme-toggle 2s infinite alternate;
+}
+
+/* Button hover state */
+button#themeToggle:hover {
+  transform: scale(1.1) !important;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.5) !important;
+}
+
+/* Button active state */
+button#themeToggle:active {
+  transform: scale(0.95) !important;
+}
+
+/* Pulse animation for theme button */
+@keyframes pulse-theme-toggle {
+  0% {
+    box-shadow: 0 0 5px rgba(99, 102, 241, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.8);
+  }
+}
+
+/* Improved theme icon */
+.header__theme-icon {
+  font-size: 24px !important;
+  display: block !important;
+}
+
+/* Debug panel */
+#debug-info {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 15px;
+  border-radius: 8px;
+  font-family: monospace;
+  width: 300px;
+  z-index: 9999;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+#debug-info button {
+  background-color: #333;
+  color: white;
+  border: 1px solid #555;
+  padding: 5px 10px;
+  margin: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#debug-info button:hover {
+  background-color: #444;
+}
+
+/* Show elements when active */
+.show-debug #debug-info {
+  display: block !important;
+}
+
+/* Additional helpful debug */
+.show-debug button,
+.show-debug .btn,
+.show-debug [role="button"] {
+  position: relative;
+}
+
+.show-debug button::after,
+.show-debug .btn::after,
+.show-debug [role="button"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 1px dashed red;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Fix for hidden components */
+.hidden {
+  display: none !important;
+}
+
+/* Fix any modals */
+.modal.active {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 9999 !important;
+}
+
+/* Additional theme toggle functionality just in case */
+.dark-mode {
+  color-scheme: dark;
+  background-color: #121212 !important;
+  color: #f9fafb !important;
+}
+
+.dark-mode .header,
+.dark-mode .chat-container,
+.dark-mode .chat-main,
+.dark-mode .chat-sidebar,
+.dark-mode .footer {
+  background-color: #1e1e1e !important;
+  color: #f9fafb !important;
+  border-color: #374151 !important;
+}
+
+.dark-mode .chat-message__content {
+  background-color: #2c2c2c !important;
+  color: #f9fafb !important;
+}
+
+.dark-mode .header__theme-icon {
+  content: "☀️" !important;
+}
+
+[data-theme="light"] .header__theme-icon {
+  content: "🌙" !important;
+} 

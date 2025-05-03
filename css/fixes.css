@@ -1,0 +1,156 @@
+/* Critical CSS fixes for StayCrest */
+
+/* Theme variables */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-accent: #f1f5f9;
+  --bg-card: #ffffff;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --border-primary: #e5e7eb;
+  --primary-color: #6366f1;
+  --primary-color-hover: #4f46e5;
+}
+
+[data-theme="dark"], .dark-mode {
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --bg-accent: #2c2c2c;
+  --bg-card: #1f2937;
+  --text-primary: #f9fafb;
+  --text-secondary: #e5e7eb;
+  --text-tertiary: #9ca3af;
+  --border-primary: #374151;
+  --primary-color: #6366f1;
+  --primary-color-hover: #4f46e5;
+}
+
+/* Theme toggle and button fixes */
+.header__theme-toggle {
+  cursor: pointer !important;
+  border-radius: 50% !important;
+  width: 40px !important;
+  height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+  color: var(--text-primary) !important;
+  transition: transform 0.2s ease !important;
+}
+
+.header__theme-toggle:hover {
+  transform: scale(1.1) !important;
+}
+
+.header__theme-toggle:active {
+  transform: scale(0.95) !important;
+}
+
+.header__theme-icon {
+  font-size: 1.2rem !important;
+}
+
+/* Modal fixes */
+.modal.active {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Fix for theme transitions */
+.theme-transition {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease !important;
+}
+
+/* Body background and transitions */
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Typing indicator */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 0;
+}
+
+.typing-indicator span {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  opacity: 0.7;
+  animation: typing-dot 1.4s infinite both;
+}
+
+.typing-indicator span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing-dot {
+  0% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+}
+
+/* Fix for dark mode text contrast */
+.dark-mode .chat-message__content,
+[data-theme="dark"] .chat-message__content {
+  background-color: var(--bg-accent);
+  color: var(--text-primary);
+}
+
+.dark-mode .chat-message--user .chat-message__content,
+[data-theme="dark"] .chat-message--user .chat-message__content {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+/* Fix for containers in dark mode */
+.dark-mode .header, 
+.dark-mode .chat-container,
+.dark-mode .chat-main,
+.dark-mode .footer,
+[data-theme="dark"] .header,
+[data-theme="dark"] .chat-container,
+[data-theme="dark"] .chat-main,
+[data-theme="dark"] .footer {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-primary);
+}
+
+.dark-mode .chat-sidebar,
+[data-theme="dark"] .chat-sidebar {
+  background-color: var(--bg-accent);
+  border-color: var(--border-primary);
+}
+
+/* Hidden elements */
+.hidden {
+  display: none !important;
+} 
