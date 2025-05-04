@@ -23,8 +23,21 @@ out/
 logs/
 *.log
 
-# Coverage directory used by tools like istanbul
+# Test artifacts
 coverage/
+.nyc_output/
+test-results/
+jest-stare/
+test-report.html
+test-report.xml
+junit.xml
+*.lcov
+.stryker-tmp/
+reports/
+cypress/videos/
+cypress/screenshots/
+mochawesome-report/
+.eslintcache
 
 # Editor directories and files
 .idea/
