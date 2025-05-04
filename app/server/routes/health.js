@@ -6,8 +6,9 @@
 
 const express = require('express');
 const os = require('os');
+const path = require('path');
 const mongoose = require('mongoose');
-const { version } = require('../../package.json');
+const { version } = require(path.join(process.cwd(), 'package.json'));
 const workerThreadManager = require('../services/worker-thread-manager');
 const searchSourcesService = require('../services/search-sources-service');
 

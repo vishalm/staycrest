@@ -94,7 +94,7 @@ class SearchAgent {
       this.isInitialized = true;
       this.logger.info('Search agent initialized successfully');
     } catch (error) {
-      this.logger.logError(error, 'Failed to initialize search agent');
+      this.logger.error('Failed to initialize search agent', { error });
       throw error;
     }
   }

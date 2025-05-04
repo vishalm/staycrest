@@ -16,7 +16,7 @@ const logger = winston.createLogger({
 
 // Create connection pool
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/staycrest',
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@postgres:5432/staycrest',
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

@@ -30,6 +30,11 @@ const logger = winston.createLogger({
   ],
 });
 
+// Add error method to logger
+logger.error = (message, meta) => {
+  logger.log('error', message, meta);
+};
+
 let sdk;
 
 /**
@@ -44,114 +49,110 @@ function setupTracing(serviceName) {
     } else if (sdk) {
       logger.info('Tracing is already initialized');
     }
-    return;
+    return Promise.resolve();
   }
   
-  try {
-    const resource = new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
-      [SemanticResourceAttributes.SERVICE_VERSION]: process.env.npm_package_version || '1.0.0',
-      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV || 'development',
-    });
-    
-    // Configure OTLP exporter
-    const exporterOptions = {
-      url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
-      headers: {},
-    };
-    
-    // Add custom headers if configured
-    if (process.env.OTEL_EXPORTER_OTLP_HEADERS) {
-      try {
-        const headers = JSON.parse(process.env.OTEL_EXPORTER_OTLP_HEADERS);
-        Object.assign(exporterOptions.headers, headers);
-      } catch (error) {
-        logger.error('Failed to parse OTEL_EXPORTER_OTLP_HEADERS', { error });
-      }
-    }
-    
-    // Create trace exporter
-    const traceExporter = new OTLPTraceExporter(exporterOptions);
-    
-    // Create span processor
-    const spanProcessor = new BatchSpanProcessor(traceExporter, {
-      // Configure batch processing
-      maxQueueSize: parseInt(process.env.OTEL_BSP_MAX_QUEUE_SIZE || '2048'),
-      maxExportBatchSize: parseInt(process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE || '512'),
-      scheduledDelayMillis: parseInt(process.env.OTEL_BSP_SCHEDULE_DELAY || '5000'),
-      exportTimeoutMillis: parseInt(process.env.OTEL_BSP_EXPORT_TIMEOUT || '30000'),
-    });
-    
-    // Configure auto-instrumentations
-    const instrumentations = getNodeAutoInstrumentations({
-      // Configure specific instrumentations
-      '@opentelemetry/instrumentation-fs': {
-        enabled: true,
-      },
-      '@opentelemetry/instrumentation-dns': {
-        enabled: true,
-      },
-      '@opentelemetry/instrumentation-express': {
-        enabled: true,
-      },
-      '@opentelemetry/instrumentation-http': {
-        enabled: true,
-      },
-      '@opentelemetry/instrumentation-redis': {
-        enabled: true,
-      },
-      '@opentelemetry/instrumentation-mongodb': {
-        enabled: true,
-      },
-      '@opentelemetry/instrumentation-pg': {
-        enabled: true,
-      },
-    });
-    
-    // Add custom instrumentations
-    instrumentations.push(
-      new RedisInstrumentation({
-        requireParentSpan: true,
-        detailedCommands: true,
-      }),
-      new MongoDBInstrumentation({
-        enhancedDatabaseReporting: true,
-      }),
-      new HttpInstrumentation({
-        ignoreIncomingPaths: ['/health', '/metrics'],
-      }),
-      new ExpressInstrumentation({
-        ignoreLayers: ['/health', '/metrics'],
-      })
-    );
-    
-    // Create OpenTelemetry SDK
-    sdk = new NodeSDK({
-      resource,
-      spanProcessor,
-      instrumentations,
-    });
-    
-    // Start OpenTelemetry SDK
-    sdk.start()
-      .then(() => {
-        logger.info(`Tracing initialized for service: ${serviceName}`);
-      })
-      .catch((error) => {
-        logger.error(`Failed to start tracing: ${error.message}`, { error });
+  return new Promise((resolve, reject) => {
+    try {
+      const resource = new Resource({
+        [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
+        [SemanticResourceAttributes.SERVICE_VERSION]: process.env.npm_package_version || '1.0.0',
+        [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV || 'development',
       });
-    
-    // Register shutdown handler
-    process.on('SIGTERM', () => {
-      sdk.shutdown()
-        .then(() => logger.info('Tracing terminated'))
-        .catch((error) => logger.error('Error terminating tracing', { error }))
-        .finally(() => process.exit(0));
-    });
-    
-  } catch (error) {
-    logger.error(`Failed to setup tracing: ${error.message}`, { error });
-  }
+      
+      // Configure OTLP exporter
+      const exporterOptions = {
+        url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
+        headers: {},
+      };
+      
+      // Add custom headers if configured
+      if (process.env.OTEL_EXPORTER_OTLP_HEADERS) {
+        try {
+          const headers = JSON.parse(process.env.OTEL_EXPORTER_OTLP_HEADERS);
+          Object.assign(exporterOptions.headers, headers);
+        } catch (error) {
+          logger.error('Failed to parse OTEL_EXPORTER_OTLP_HEADERS', { error });
+        }
+      }
+      
+      // Create trace exporter
+      const traceExporter = new OTLPTraceExporter(exporterOptions);
+      
+      // Create span processor
+      const spanProcessor = new BatchSpanProcessor(traceExporter, {
+        // Configure batch processing
+        maxQueueSize: parseInt(process.env.OTEL_BSP_MAX_QUEUE_SIZE || '2048'),
+        maxExportBatchSize: parseInt(process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE || '512'),
+        scheduledDelayMillis: parseInt(process.env.OTEL_BSP_SCHEDULE_DELAY || '5000'),
+        exportTimeoutMillis: parseInt(process.env.OTEL_BSP_EXPORT_TIMEOUT || '30000'),
+      });
+      
+      // Configure auto-instrumentations
+      const instrumentations = getNodeAutoInstrumentations({
+        // Configure specific instrumentations
+        '@opentelemetry/instrumentation-fs': {
+          enabled: true,
+        },
+        '@opentelemetry/instrumentation-dns': {
+          enabled: true,
+        },
+        '@opentelemetry/instrumentation-express': {
+          enabled: true,
+        },
+        '@opentelemetry/instrumentation-http': {
+          enabled: true,
+        },
+        '@opentelemetry/instrumentation-redis': {
+          enabled: true,
+        },
+        '@opentelemetry/instrumentation-mongodb': {
+          enabled: true,
+        },
+        '@opentelemetry/instrumentation-pg': {
+          enabled: true,
+        },
+      });
+      
+      // Add custom instrumentations
+      instrumentations.push(
+        new RedisInstrumentation({
+          requireParentSpan: true,
+          detailedCommands: true,
+        }),
+        new MongoDBInstrumentation({
+          enhancedDatabaseReporting: true,
+        }),
+        new HttpInstrumentation({
+          ignoreIncomingPaths: ['/health', '/metrics'],
+        }),
+        new ExpressInstrumentation({
+          ignoreLayers: ['/health', '/metrics'],
+        })
+      );
+      
+      // Create SDK
+      sdk = new NodeSDK({
+        resource,
+        spanProcessor,
+        instrumentations,
+      });
+      
+      // Start the SDK
+      sdk.start()
+        .then(() => {
+          logger.info('Tracing initialized successfully');
+          resolve();
+        })
+        .catch((error) => {
+          logger.error('Failed to initialize tracing', { error });
+          reject(error);
+        });
+    } catch (error) {
+      logger.error('Failed to setup tracing', { error });
+      reject(error);
+    }
+  });
 }
 
 /**

@@ -115,7 +115,13 @@ const logger = winston.createLogger({
 });
 
 // Setup distributed tracing
-setupTracing('staycrest-api');
+setupTracing('staycrest-api')
+  .then(() => {
+    logger.info('Tracing setup completed successfully');
+  })
+  .catch((error) => {
+    logger.error('Failed to setup tracing', { error });
+  });
 
 // Initialize express app
 const app = express();
@@ -149,6 +155,37 @@ const apiLimiter = rateLimit({
 
 // Middleware
 app.use(correlationIdMiddleware);
+
+// Serve static files from the root directory
+app.use(express.static(path.join(__dirname, '../../')));
+
+// Serve static files from /app directory
+app.use(express.static('/app'));
+
+// Serve HTML files
+app.get('/', (req, res) => {
+  res.sendFile(path.join('/app', 'index.html'));
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join('/app', 'admin.html'));
+});
+
+app.get('/admin-login', (req, res) => {
+  res.sendFile(path.join('/app', 'admin-login.html'));
+});
+
+app.get('/test', (req, res) => {
+  res.sendFile(path.join('/app', 'test.html'));
+});
+
+app.get('/full-test', (req, res) => {
+  res.sendFile(path.join('/app', 'full-test.html'));
+});
+
+app.get('/html-check', (req, res) => {
+  res.sendFile(path.join('/app', 'html-check.html'));
+});
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false, limit: '2mb' }));
@@ -533,31 +570,6 @@ app.use('/api/user', legacyUserRoutes);
 app.use('/api/analytics', legacyAnalyticsRoutes);
 app.use('/api/admin', legacyAdminRoutes);
 app.use('/api/health', legacyHealthRoutes);
-
-// API version redirect for root path
-app.get('/api', (req, res) => {
-  res.json({
-    name: 'StayCrest API',
-    version: '1.0.0',
-    description: 'StayCrest hotel discovery platform API',
-    currentVersion: 'v1',
-    documentation: '/api/docs',
-    versions: {
-      v1: {
-        status: 'current',
-        url: '/api/v1'
-      }
-    }
-  });
-});
-
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/build')));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build/index.html'));
-  });
-}
 
 // Error handling middleware
 app.use(errorHandler);

@@ -750,6 +750,105 @@ class WebSearchService {
       };
     }
   }
+
+  /**
+   * Get hotel reviews
+   * @param {string} hotelId - Hotel ID
+   * @returns {Promise<Array>} Hotel reviews
+   */
+  async getHotelReviews(hotelId) {
+    const startTime = Date.now();
+    const reviewId = `reviews_${hotelId}_${Date.now()}`;
+
+    try {
+      this.logger.info('Fetching hotel reviews', {
+        reviewId,
+        hotelId
+      });
+
+      if (!this.isInitialized) {
+        this.logger.warn('Service not initialized, attempting to initialize', {
+          reviewId
+        });
+        await this.initialize();
+      }
+
+      // Get enabled sources
+      const sources = this.loyaltyManager.getEnabledSources();
+      
+      if (sources.length === 0) {
+        const error = new Error('No hotel review sources configured');
+        this.logger.error('No review sources available', { reviewId });
+        throw error;
+      }
+
+      // Try to get reviews from each source in parallel
+      const reviewPromises = sources.map(source => 
+        this.loyaltyManager.extractReviews(source.id, hotelId)
+          .then(result => {
+            this.logger.debug(`Reviews fetched from source: ${source.name}`, {
+              reviewId,
+              source: source.name,
+              reviewCount: result.reviews?.length || 0
+            });
+            return result.reviews || [];
+          })
+          .catch(error => {
+            this.logger.error(`Error fetching reviews from source: ${source.name}`, {
+              reviewId,
+              source: source.name,
+              error: error.message,
+              stack: error.stack
+            });
+            return [];
+          })
+      );
+
+      // Wait for all review fetches to complete
+      const allReviews = await Promise.all(reviewPromises);
+
+      // Combine and deduplicate reviews
+      const reviews = [];
+      const seenReviews = new Set();
+
+      for (const sourceReviews of allReviews) {
+        for (const review of sourceReviews) {
+          const reviewKey = `${review.author}|${review.date}|${review.rating}`.toLowerCase();
+          if (!seenReviews.has(reviewKey)) {
+            seenReviews.add(reviewKey);
+            reviews.push(review);
+          }
+        }
+      }
+
+      const duration = Date.now() - startTime;
+      
+      this.logger.info('Reviews fetched successfully', {
+        reviewId,
+        duration,
+        totalReviews: reviews.length,
+        sourceBreakdown: allReviews.reduce((acc, sourceReviews, index) => {
+          acc[sources[index].name] = sourceReviews.length;
+          return acc;
+        }, {})
+      });
+
+      return reviews;
+
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      
+      this.logger.error('Failed to fetch reviews', {
+        reviewId,
+        duration,
+        error: error.message,
+        stack: error.stack,
+        hotelId
+      });
+
+      throw error;
+    }
+  }
 }
 
 module.exports = new WebSearchService(); 

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="StayCrest - AI-Powered Hotel Discovery & Loyalty Aggregation Platform">
+    <meta name="theme-color" content="#ffffff">
+    <title>StayCrest | AI-Powered Hotel Discovery</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="assets/images/StayCrest_LOGO.png">
+    
+    <!-- CSS - Load only main.css file -->
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/fixes.css">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Meta tags for social sharing -->
+    <meta property="og:title" content="StayCrest | AI-Powered Hotel Discovery">
+    <meta property="og:description" content="Find the best hotel deals across loyalty programs with AI-powered search">
+    <meta property="og:image" content="assets/images/StayCrest_LOGO.png">
+    <meta property="og:url" content="https://staycrest.com">
+    <meta name="twitter:card" content="summary_large_image">
+    
+    <style>
+        /* Critical CSS for initial render */
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f9fafb;
+            --text-primary: #111827;
+            --text-secondary: #4b5563;
+            --border-primary: #e5e7eb;
+            --primary-color: #6366f1;
+        }
+        
+        [data-theme="dark"] {
+            --bg-primary: #121212;
+            --bg-secondary: #1e1e1e;
+            --text-primary: #f9fafb;
+            --text-secondary: #e5e7eb;
+            --border-primary: #374151;
+            --primary-color: #8183f4;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .theme-transition {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+
+        /* Theme toggle */
+        .header__theme-toggle {
+            cursor: pointer;
+            z-index: 100;
+        }
+        
+        /* Typing indicator */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 0;
+        }
+        
+        .typing-indicator span {
+            display: block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            opacity: 0.7;
+            animation: typing-dot 1.4s infinite both;
+        }
+        
+        @keyframes typing-dot {
+            0% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
+            100% { opacity: 0.4; transform: scale(1); }
+        }
+        
+        /* Modal fix */
+        .modal.active {
+            display: flex !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+    </style>
+</head>
+<body class="show-debug">
+    <div id="app" class="app">
+        <!-- Debug Info -->
+        <div id="debug-info" style="display: none;">
+            <div>Theme: <span id="current-theme">light</span></div>
+            <div>Last Action: <span id="last-action">None</span></div>
+            <div>
+                <button onclick="document.documentElement.setAttribute('data-theme', 'light'); document.body.classList.remove('dark-mode'); document.getElementById('current-theme').textContent = 'light';">
+                    Force Light
+                </button>
+                <button onclick="document.documentElement.setAttribute('data-theme', 'dark'); document.body.classList.add('dark-mode'); document.getElementById('current-theme').textContent = 'dark';">
+                    Force Dark
+                </button>
+            </div>
+        </div>
+        
+        <!-- Header -->
+        <header class="header">
+            <div class="container">
+                <div class="header__logo">
+                    <img src="assets/images/StayCrest_LOGO.png" alt="StayCrest Logo" class="header__logo-img">
+                </div>
+                <nav class="header__nav">
+                    <ul class="header__nav-list">
+                        <li class="header__nav-item"><a href="#" class="header__nav-link active">Home</a></li>
+                        <li class="header__nav-item"><a href="#" class="header__nav-link">Features</a></li>
+                        <li class="header__nav-item"><a href="#" class="header__nav-link">About</a></li>
+                    </ul>
+                </nav>
+                <div class="header__actions">
+                    <button id="themeToggle" class="header__theme-toggle" aria-label="Toggle dark mode">
+                        <span class="header__theme-icon" title="Switch to dark mode">🌙</span>
+                    </button>
+                    <div class="header__user">
+                        <button id="loginButton" class="btn btn--outline">Login</button>
+                        <div id="userProfile" class="header__user-profile hidden">
+                            <img src="assets/images/avatar-placeholder.jpg" alt="User profile" class="header__user-avatar">
+                            <div class="header__user-dropdown">
+                                <a href="#" class="header__user-link">
+                                    <span>👤</span> Profile
+                                </a>
+                                <a href="#" class="header__user-link">
+                                    <span>🔍</span> Saved Searches
+                                </a>
+                                <a href="#" class="header__user-link">
+                                    <span>⚙️</span> Settings
+                                </a>
+                                <a href="#" class="header__user-link header__user-link--logout">
+                                    <span>🚪</span> Logout
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main content -->
+        <main class="main">
+            <div class="container">
+                <!-- Chat interface -->
+                <section class="chat-container">
+                    <div class="chat-sidebar">
+                        <div class="chat-sidebar__history">
+                            <h3 class="chat-sidebar__title">Recent Conversations</h3>
+                            <ul class="chat-sidebar__list" id="conversationList">
+                                <!-- Populated by JS -->
+                                <li class="chat-sidebar__item chat-sidebar__item--new">
+                                    <span class="chat-sidebar__icon">+</span>
+                                    <span class="chat-sidebar__text">New Conversation</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="chat-sidebar__saved">
+                            <h3 class="chat-sidebar__title">Saved Searches</h3>
+                            <ul class="chat-sidebar__list" id="savedSearchesList">
+                                <!-- Populated by JS -->
+                                <li class="chat-sidebar__item chat-sidebar__item--empty">
+                                    <span class="chat-sidebar__text">No saved searches yet</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-main">
+                        <div class="chat-messages" id="chatMessages">
+                            <!-- Welcome message -->
+                            <div class="chat-message chat-message--system">
+                                <div class="chat-message__content">
+                                    <p>Welcome to StayCrest! I'm your AI travel assistant. How can I help you today?</p>
+                                </div>
+                            </div>
+                            <div class="chat-message chat-message--system">
+                                <div class="chat-message__content">
+                                    <p>You can ask me to:</p>
+                                    <ul>
+                                        <li>Find hotels in specific locations</li>
+                                        <li>Compare loyalty programs</li>
+                                        <li>Check point values and redemption options</li>
+                                        <li>Find the best deals for your travel dates</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            
+                            <!-- Messages will be populated here by JS -->
+                        </div>
+                        
+                        <div class="chat-input">
+                            <button class="chat-input__voice" id="voiceButton" aria-label="Voice input">
+                                <span class="chat-input__voice-icon">🎤</span>
+                            </button>
+                            <textarea 
+                                id="chatInput" 
+                                class="chat-input__textarea" 
+                                placeholder="Ask about hotels, loyalty programs, or travel suggestions..."
+                                rows="1"
+                                aria-label="Chat input"
+                            ></textarea>
+                            <button class="chat-input__submit" id="sendButton" aria-label="Send message">
+                                <span class="chat-input__submit-icon">↑</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-details">
+                        <div class="chat-details__header">
+                            <h3 class="chat-details__title">Search Results</h3>
+                            <button class="chat-details__close" id="detailsCloseButton" aria-label="Close details">×</button>
+                        </div>
+                        <div class="chat-details__content" id="searchResults">
+                            <!-- Search results will be populated here by JS -->
+                            <div class="chat-details__empty">
+                                <p>Search results will appear here</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="container">
+                <div class="footer__content">
+                    <div class="footer__logo">
+                        <img src="assets/images/StayCrest_LOGO.png" alt="StayCrest" class="footer__logo-img">
+                    </div>
+                    <div class="footer__links">
+                        <a href="#" class="footer__link">Privacy Policy</a>
+                        <a href="#" class="footer__link">Terms of Service</a>
+                        <a href="#" class="footer__link">Contact Us</a>
+                    </div>
+                    <div class="footer__copyright">
+                        <p>&copy; 2025 StayCrest. All rights reserved.</p>
+                        <p>Made with ❤️ for travelers by travelers</p>
+                    </div>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Modal components -->
+        <div class="modal" id="loginModal">
+            <div class="modal__overlay"></div>
+            <div class="modal__container">
+                <div class="modal__header">
+                    <h2 class="modal__title">Login to StayCrest</h2>
+                    <button class="modal__close" id="loginModalClose">×</button>
+                </div>
+                <div class="modal__content">
+                    <div class="login-form">
+                        <div class="login-form__social">
+                            <button class="login-form__social-btn login-form__social-btn--google">
+                                <span class="login-form__social-icon">G</span>
+                                <span class="login-form__social-text">Continue with Google</span>
+                            </button>
+                            <button class="login-form__social-btn login-form__social-btn--facebook">
+                                <span class="login-form__social-icon">f</span>
+                                <span class="login-form__social-text">Continue with Facebook</span>
+                            </button>
+                            <button class="login-form__social-btn login-form__social-btn--apple">
+                                <span class="login-form__social-icon">🍎</span>
+                                <span class="login-form__social-text">Continue with Apple</span>
+                            </button>
+                        </div>
+                        
+                        <div class="login-form__divider">
+                            <span class="login-form__divider-text">or</span>
+                        </div>
+                        
+                        <form class="login-form__form" id="loginForm">
+                            <div class="login-form__field">
+                                <label for="email" class="login-form__label">Email</label>
+                                <input type="email" id="email" class="login-form__input" placeholder="your@email.com">
+                            </div>
+                            <div class="login-form__field">
+                                <label for="password" class="login-form__label">Password</label>
+                                <input type="password" id="password" class="login-form__input" placeholder="••••••••">
+                            </div>
+                            <div class="login-form__options">
+                                <label class="login-form__checkbox">
+                                    <input type="checkbox" id="rememberMe">
+                                    <span class="login-form__checkbox-text">Remember me</span>
+                                </label>
+                                <a href="#" class="login-form__forgot">Forgot password?</a>
+                            </div>
+                            <button type="submit" class="login-form__submit btn btn--primary">Login</button>
+                        </form>
+                        
+                        <div class="login-form__signup">
+                            <p>Don't have an account? <a href="#" id="signupLink">Sign up</a></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Voice feedback -->
+        <div class="voice-feedback" id="voiceFeedback">
+            <div class="voice-feedback__container">
+                <div class="voice-feedback__visualizer">
+                    <div class="voice-feedback__bar"></div>
+                    <div class="voice-feedback__bar"></div>
+                    <div class="voice-feedback__bar"></div>
+                    <div class="voice-feedback__bar"></div>
+                    <div class="voice-feedback__bar"></div>
+                </div>
+                <div class="voice-feedback__text" id="voiceText">Listening...</div>
+                <button class="voice-feedback__cancel" id="voiceCancelButton">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/app-simple.js"></script>
+</body>
+</html>

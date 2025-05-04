@@ -43,12 +43,12 @@ processors:
     sampling_percentage: 100
 
 exporters:
-  jaeger:
-    endpoint: jaeger:14250
-    tls:
-      insecure: true
   otlp:
     endpoint: jaeger:4317
+    tls:
+      insecure: true
+  otlphttp:
+    endpoint: http://jaeger:14268/api/traces
     tls:
       insecure: true
   logging:
@@ -56,15 +56,13 @@ exporters:
   prometheus:
     endpoint: 0.0.0.0:8889
     namespace: staycrest
-  file:
-    path: /etc/otelcol/logs/traces.json
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch, resource]
-      exporters: [jaeger, otlp, logging, file]
+      exporters: [otlp, otlphttp, logging]
     metrics:
       receivers: [otlp, prometheus]
       processors: [memory_limiter, batch, resource]
