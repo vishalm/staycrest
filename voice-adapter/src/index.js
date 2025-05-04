@@ -8,6 +8,7 @@ const FormData = require('form-data');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
+require('dotenv').config();
 
 // Configure Winston logger
 const logger = createLogger({
@@ -39,6 +40,12 @@ const port = process.env.PORT || 3200;
 
 app.use(cors());
 app.use(express.json());
+
+// Create upload and cache directories
+const uploadsDir = path.join(__dirname, '../uploads');
+const cacheDir = path.join(__dirname, '../cache');
+fs.mkdirSync(uploadsDir, { recursive: true });
+fs.mkdirSync(cacheDir, { recursive: true });
 
 // WebSocket server for streaming
 const wss = new WebSocket.Server({ noServer: true });
@@ -83,7 +90,7 @@ wss.on('connection', (ws) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'healthy' });
 });
 
 // Text-to-speech endpoint
@@ -154,5 +161,14 @@ const server = app.listen(port, () => {
 server.on('upgrade', (request, socket, head) => {
   wss.handleUpgrade(request, socket, head, (ws) => {
     wss.emit('connection', ws, request);
+  });
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received. Starting graceful shutdown...');
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
   });
 }); 

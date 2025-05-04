@@ -62,8 +62,12 @@ The easiest way to run the complete StayCrest platform is with Docker Compose.
 ### Running the Full Stack
 
 ```bash
-# Start all services
-docker compose up -d
+# Build and run all services
+docker-compose up --build
+
+# Build and run specific services
+docker-compose up --build app
+docker-compose up --build voice-adapter
 
 # Check service status
 docker compose ps

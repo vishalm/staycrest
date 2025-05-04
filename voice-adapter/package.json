@@ -1,7 +1,7 @@
 {
-  "name": "voice-adapter",
+  "name": "staycrest-voice-adapter",
   "version": "1.0.0",
-  "description": "Voice adapter service for StayCrest",
+  "description": "Voice adapter service for StayCrest platform",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -13,14 +13,17 @@
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "winston": "^3.11.0",
-    "multer": "^1.4.5-lts.1",
     "node-fetch": "^2.7.0",
-    "form-data": "^4.0.0",
+    "ffmpeg-static": "^5.2.0",
+    "sox": "^0.1.0",
+    "fluent-ffmpeg": "^2.1.2",
     "ws": "^8.14.2",
+    "multer": "^1.4.5-lts.1",
+    "form-data": "^4.0.0",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "jest": "^29.7.0",
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0"
   }
 } 

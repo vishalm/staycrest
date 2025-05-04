@@ -4,8 +4,11 @@ services:
   # Application Service
   app:
     build:
-      context: .
+      context: ./app
       dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
     container_name: staycrest-app
     restart: unless-stopped
     ports:
@@ -357,9 +360,10 @@ services:
   # Voice Adapter Service
   voice-adapter:
     build:
-      context: .
-      dockerfile: Dockerfile.voice-adapter
+      context: ./voice-adapter
+      dockerfile: Dockerfile
       platforms:
+        - linux/amd64
         - linux/arm64
     container_name: staycrest-voice-adapter
     restart: unless-stopped
