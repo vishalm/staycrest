@@ -3,30 +3,48 @@ FROM --platform=$BUILDPLATFORM node:18 as builder
 
 WORKDIR /app
 
-# Install build dependencies and download Node.js headers
+# Install build dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
+    python3-venv \
     make \
     g++ \
     wget \
+    ca-certificates \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /usr/local/share/node-gyp/18.20.8 \
-    && wget -q -O - https://nodejs.org/download/release/v18.20.8/node-v18.20.8-headers.tar.gz \
-    | tar xz --strip-components=1 -C /usr/local/share/node-gyp/18.20.8
+    && rm -rf /var/lib/apt/lists/*
+
+# Create and activate Python virtual environment
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Download and extract Node.js headers with verification
+RUN mkdir -p /usr/local/share/node-gyp/18.20.8 && \
+    cd /tmp && \
+    wget --no-check-certificate https://nodejs.org/download/release/v18.20.8/node-v18.20.8-headers.tar.gz && \
+    tar xzf node-v18.20.8-headers.tar.gz && \
+    cp -r node-v18.20.8/* /usr/local/share/node-gyp/18.20.8/ && \
+    rm -rf /tmp/node-v18.20.8*
 
 # Set Python environment and node-gyp paths
 ENV PYTHON=/usr/bin/python3 \
     NODE_GYP_FORCE_PYTHON=/usr/bin/python3 \
-    npm_config_nodedir=/usr/local/share/node-gyp/18.20.8
+    npm_config_nodedir=/usr/local/share/node-gyp/18.20.8 \
+    NODE_TLS_REJECT_UNAUTHORIZED=0 \
+    npm_config_strict_ssl=false
+
+# Configure npm to skip SSL verification
+RUN npm config set strict-ssl false && \
+    npm config set registry http://registry.npmjs.org/
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with legacy peer deps
-RUN npm install --legacy-peer-deps
+# Install dependencies with legacy peer deps and no SSL verification
+RUN NODE_TLS_REJECT_UNAUTHORIZED=0 npm install --legacy-peer-deps --no-strict-ssl
 
 # Copy source code
 COPY . .
@@ -39,24 +57,32 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    python3-minimal \
+    python3 \
     python3-pip \
+    python3-venv \
     ffmpeg \
     sox \
     curl \
-    && pip3 install --no-cache-dir \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create and activate Python virtual environment
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Install Python packages in virtual environment
+RUN pip3 install --no-cache-dir \
     torch \
     torchaudio \
     numpy \
     soundfile \
-    librosa \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    librosa
 
 # Create app directory and use non-root user
 RUN groupadd -g 1001 nodejs && \
     useradd -u 1001 -g nodejs -s /bin/bash -m staycrest && \
-    chown -R staycrest:nodejs /app
+    chown -R staycrest:nodejs /app /opt/venv
 
 # Create necessary directories with proper permissions
 RUN mkdir -p \

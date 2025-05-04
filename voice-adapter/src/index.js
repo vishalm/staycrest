@@ -89,32 +89,88 @@ wss.on('connection', (ws) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy' });
+app.get('/health', async (req, res) => {
+  try {
+    // Check if voice service is accessible
+    const response = await fetch(`${VOICE_SERVICE_URL}/health`);
+    if (!response.ok) {
+      return res.status(503).json({ 
+        status: 'unhealthy',
+        error: 'Voice service is not available'
+      });
+    }
+    res.json({ status: 'healthy' });
+  } catch (error) {
+    logger.error('Health check failed', { error });
+    res.status(503).json({ 
+      status: 'unhealthy',
+      error: 'Voice service is not accessible'
+    });
+  }
 });
 
 // Text-to-speech endpoint
 app.post('/tts', async (req, res) => {
   try {
-    const { text, voice_id } = req.body;
-    logger.info('Processing TTS request', { text, voice_id });
+    const { text, voice_id = 'default', language = 'en' } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ error: 'Text is required' });
+    }
 
-    const response = await fetch(`${VOICE_SERVICE_URL}/api/tts`, {
+    logger.info('Processing TTS request', { text, voice_id, language });
+
+    // Prepare request payload according to Coqui TTS API
+    const payload = {
+      text,
+      voice_id,
+      language,
+      format: 'wav',
+      speed: 1.0
+    };
+
+    logger.debug('Sending request to voice service', { 
+      url: `${VOICE_SERVICE_URL}/api/v1/tts`,
+      payload 
+    });
+
+    const response = await fetch(`${VOICE_SERVICE_URL}/api/v1/tts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice_id })
+      body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
-      throw new Error(`Voice service responded with ${response.status}`);
+      const errorText = await response.text();
+      logger.error('Voice service error', { 
+        status: response.status, 
+        error: errorText 
+      });
+      throw new Error(`Voice service error: ${response.status} - ${errorText}`);
     }
 
     const audioBuffer = await response.buffer();
-    res.set('Content-Type', 'audio/wav');
+    
+    // Cache the audio file
+    const cacheFile = path.join(cacheDir, `${uuidv4()}.wav`);
+    fs.writeFileSync(cacheFile, audioBuffer);
+    logger.debug('Cached audio file', { path: cacheFile });
+
+    res.set({
+      'Content-Type': 'audio/wav',
+      'Content-Length': audioBuffer.length,
+      'Cache-Control': 'public, max-age=31536000'
+    });
     res.send(audioBuffer);
   } catch (error) {
-    logger.error('TTS request failed', { error });
-    res.status(500).json({ error: 'Failed to process TTS request' });
+    logger.error('TTS request failed', { 
+      error: error.message,
+      stack: error.stack 
+    });
+    res.status(500).json({ 
+      error: 'Failed to process TTS request',
+      details: error.message
+    });
   }
 });
 
@@ -130,13 +186,14 @@ app.post('/stt', upload.single('audio'), async (req, res) => {
     const formData = new FormData();
     formData.append('audio', fs.createReadStream(req.file.path));
 
-    const response = await fetch(`${VOICE_SERVICE_URL}/api/stt`, {
+    const response = await fetch(`${VOICE_SERVICE_URL}/api/v1/stt`, {
       method: 'POST',
       body: formData
     });
 
     if (!response.ok) {
-      throw new Error(`Voice service responded with ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Voice service error: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
@@ -148,7 +205,10 @@ app.post('/stt', upload.single('audio'), async (req, res) => {
     });
   } catch (error) {
     logger.error('STT request failed', { error });
-    res.status(500).json({ error: 'Failed to process STT request' });
+    res.status(500).json({ 
+      error: 'Failed to process STT request',
+      details: error.message
+    });
   }
 });
 

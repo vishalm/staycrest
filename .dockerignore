@@ -1,0 +1,96 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Node.js
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+*.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage
+.nyc_output
+jest-coverage
+
+# Debug logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker
+Dockerfile*
+docker-compose*
+.docker
+
+# Cache directories
+.cache
+.npm
+.yarn
+.pnp
+.pnp.js
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+env/
+.env/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Temporary files
+tmp
+temp
+*.tmp
+*.temp
+
+# Audio files (if not needed in Docker image)
+*.wav
+*.mp3
+*.ogg
+*.flac
+
+# Development configs
+.eslintrc*
+.prettierrc*
+.editorconfig
+jest.config.*
+tsconfig.*
+*.config.js
+*.config.ts 
