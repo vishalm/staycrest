@@ -114,8 +114,8 @@ module.exports = {
           query: 'Hotels in New York',
           parameters: {
             location: 'New York',
-            checkIn: '2023-12-10',
-            checkOut: '2023-12-15',
+            checkIn: '2025-12-10',
+            checkOut: '2025-12-15',
             guests: 2,
             rooms: 1
           },

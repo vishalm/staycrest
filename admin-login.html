@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="StayCrest Admin - Login">
+    <title>StayCrest Admin | Login</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="assets/images/StayCrest_LOGO.png">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/fixes.css">
+    <link rel="stylesheet" href="css/admin.css">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Additional login-specific styles */
+        .login-container {
+            max-width: 400px;
+            margin: 120px auto;
+            padding: var(--spacing-lg);
+            background-color: var(--bg-primary);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .login-logo {
+            text-align: center;
+            margin-bottom: var(--spacing-lg);
+        }
+        
+        .login-logo img {
+            max-width: 100px;
+            height: auto;
+        }
+        
+        .login-title {
+            text-align: center;
+            margin-bottom: var(--spacing-lg);
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .login-form .form-group {
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .login-form .form-label {
+            display: block;
+            margin-bottom: var(--spacing-xs);
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        
+        .login-form .form-input {
+            width: 100%;
+            padding: var(--spacing-md);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-md);
+            background-color: var(--bg-secondary);
+            transition: all var(--transition-fast);
+        }
+        
+        .login-form .form-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+        }
+        
+        .login-form .btn {
+            width: 100%;
+            padding: var(--spacing-md);
+            margin-top: var(--spacing-md);
+        }
+        
+        .error-message {
+            color: var(--error-color);
+            font-size: 0.875rem;
+            margin-top: var(--spacing-xs);
+            display: none;
+        }
+        
+        .login-footer {
+            text-align: center;
+            margin-top: var(--spacing-lg);
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        .login-footer a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .theme-toggle {
+            position: absolute;
+            top: var(--spacing-md);
+            right: var(--spacing-md);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            color: var(--text-primary);
+        }
+        
+        .alert {
+            padding: var(--spacing-sm) var(--spacing-md);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--spacing-md);
+            display: none;
+        }
+        
+        .alert--error {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--error-color);
+        }
+        
+        .alert--success {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+        }
+    </style>
+</head>
+<body class="admin-login-page">
+    <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode">
+        <span id="themeIcon" title="Switch to dark mode">🌙</span>
+    </button>
+    
+    <div class="login-container">
+        <div class="login-logo">
+            <img src="assets/images/StayCrest_LOGO.png" alt="StayCrest Logo">
+        </div>
+        
+        <h1 class="login-title">StayCrest Admin Login</h1>
+        
+        <div id="loginAlert" class="alert alert--error">
+            Invalid email or password. Please try again.
+        </div>
+        
+        <form id="loginForm" class="login-form">
+            <div class="form-group">
+                <label for="email" class="form-label">Email</label>
+                <input type="email" id="email" class="form-input" required autocomplete="email">
+            </div>
+            
+            <div class="form-group">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" id="password" class="form-input" required autocomplete="current-password">
+            </div>
+            
+            <button type="submit" class="btn btn--primary">Login</button>
+        </form>
+        
+        <div class="login-footer">
+            <p>Return to <a href="index.html">Homepage</a></p>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Constants
+            const API_URL = '/api';
+            
+            // DOM Elements
+            const loginForm = document.getElementById('loginForm');
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const loginAlert = document.getElementById('loginAlert');
+            const themeToggle = document.getElementById('themeToggle');
+            const themeIcon = document.getElementById('themeIcon');
+            
+            // Check if user is already logged in
+            function checkAuth() {
+                const token = localStorage.getItem('token');
+                if (token) {
+                    // Verify token is valid and user has admin access
+                    fetch(`${API_URL}/auth/me`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            return response.json();
+                        }
+                        throw new Error('Authentication failed');
+                    })
+                    .then(data => {
+                        if (data.status === 'success') {
+                            const userRole = data.data.user.role;
+                            if (userRole === 'admin' || userRole === 'superadmin' || userRole === 'moderator') {
+                                // Redirect to admin panel
+                                window.location.href = 'admin.html';
+                            } else {
+                                // User doesn't have admin rights
+                                showAlert('You do not have permission to access the admin panel.');
+                                localStorage.removeItem('token');
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Auth check error:', error);
+                        localStorage.removeItem('token');
+                    });
+                }
+            }
+            
+            // Handle login form submission
+            function handleLogin(e) {
+                e.preventDefault();
+                
+                const email = emailInput.value.trim();
+                const password = passwordInput.value;
+                
+                // Basic validation
+                if (!email || !password) {
+                    showAlert('Please enter both email and password.');
+                    return;
+                }
+                
+                // Hide any previous alerts
+                hideAlert();
+                
+                // Attempt login
+                fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Store token
+                        localStorage.setItem('token', data.token);
+                        
+                        // Check if user has admin rights
+                        const userRole = data.user.role;
+                        if (userRole === 'admin' || userRole === 'superadmin' || userRole === 'moderator') {
+                            // Redirect to admin panel
+                            window.location.href = 'admin.html';
+                        } else {
+                            // User doesn't have admin rights
+                            showAlert('You do not have permission to access the admin panel.');
+                            localStorage.removeItem('token');
+                        }
+                    } else {
+                        // Login failed
+                        showAlert(data.message || 'Login failed. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Login error:', error);
+                    showAlert('An error occurred. Please try again later.');
+                });
+            }
+            
+            // Helper functions for UI
+            function showAlert(message) {
+                loginAlert.textContent = message;
+                loginAlert.style.display = 'block';
+            }
+            
+            function hideAlert() {
+                loginAlert.style.display = 'none';
+            }
+            
+            // Theme handling
+            function initTheme() {
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                document.documentElement.setAttribute('data-theme', savedTheme);
+                updateThemeIcon(savedTheme);
+            }
+            
+            function toggleTheme() {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+                updateThemeIcon(newTheme);
+            }
+            
+            function updateThemeIcon(theme) {
+                if (theme === 'dark') {
+                    themeIcon.textContent = '☀️';
+                    themeIcon.title = 'Switch to light mode';
+                } else {
+                    themeIcon.textContent = '🌙';
+                    themeIcon.title = 'Switch to dark mode';
+                }
+            }
+            
+            // Event listeners
+            loginForm.addEventListener('submit', handleLogin);
+            themeToggle.addEventListener('click', toggleTheme);
+            
+            // Initialize
+            initTheme();
+            checkAuth();
+        });
+    </script>
+</body>
+</html> 

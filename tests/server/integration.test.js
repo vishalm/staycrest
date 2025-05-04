@@ -121,8 +121,8 @@ describe('Server Integration Tests', () => {
       query: 'Hotels in London',
       parameters: {
         location: 'London',
-        checkIn: '2023-12-10',
-        checkOut: '2023-12-15'
+        checkIn: '2025-12-10',
+        checkOut: '2025-12-15'
       },
       isSaved: true,
       savedName: 'London Trip',

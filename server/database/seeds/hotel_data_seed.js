@@ -53,7 +53,7 @@ const hotelData = [
       program: 'Marriott Bonvoy',
       type: 'loyalty_program',
       brands: 'Marriott, Westin, Sheraton, Ritz-Carlton, St. Regis',
-      last_updated: '2023-10-15'
+      last_updated: '2025-10-15'
     }
   },
   {
@@ -88,7 +88,7 @@ const hotelData = [
       program: 'Hilton Honors',
       type: 'loyalty_program',
       brands: 'Hilton, Conrad, Waldorf Astoria, DoubleTree, Hampton',
-      last_updated: '2023-09-22'
+      last_updated: '2025-09-22'
     }
   },
   {
@@ -124,7 +124,7 @@ const hotelData = [
       program: 'IHG One Rewards',
       type: 'loyalty_program',
       brands: 'InterContinental, Kimpton, Holiday Inn, Crowne Plaza, Hotel Indigo',
-      last_updated: '2023-11-05'
+      last_updated: '2025-11-05'
     }
   },
   {
@@ -160,7 +160,7 @@ const hotelData = [
       program: 'World of Hyatt',
       type: 'loyalty_program',
       brands: 'Hyatt, Park Hyatt, Grand Hyatt, Andaz, Thompson',
-      last_updated: '2023-10-30'
+      last_updated: '2025-10-30'
     }
   },
   {
@@ -204,7 +204,7 @@ const hotelData = [
       parent_company: 'Marriott',
       type: 'hotel_property',
       loyalty_program: 'Marriott Bonvoy',
-      last_updated: '2023-08-25'
+      last_updated: '2025-08-25'
     }
   },
   {
@@ -249,7 +249,7 @@ const hotelData = [
       parent_company: 'Hilton',
       type: 'hotel_property',
       loyalty_program: 'Hilton Honors',
-      last_updated: '2023-09-18'
+      last_updated: '2025-09-18'
     }
   },
   {
@@ -296,7 +296,7 @@ const hotelData = [
       parent_company: 'IHG',
       type: 'hotel_property',
       loyalty_program: 'IHG One Rewards',
-      last_updated: '2023-07-12'
+      last_updated: '2025-07-12'
     }
   },
   {
@@ -343,7 +343,7 @@ const hotelData = [
       parent_company: 'Hyatt',
       type: 'hotel_property',
       loyalty_program: 'World of Hyatt',
-      last_updated: '2023-10-05'
+      last_updated: '2025-10-05'
     }
   }
 ];

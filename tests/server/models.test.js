@@ -199,8 +199,8 @@ describe('Database Models', () => {
         query: 'hotels in new york',
         parameters: {
           location: 'New York',
-          checkIn: '2023-12-15',
-          checkOut: '2023-12-20',
+          checkIn: '2025-12-15',
+          checkOut: '2025-12-20',
           guests: 2
         },
         loyaltyPrograms: ['marriott-bonvoy', 'hilton-honors'],

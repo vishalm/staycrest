@@ -158,7 +158,7 @@ class LLMProvider {
       baseURL: 'https://api.anthropic.com',
       headers: {
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'anthropic-version': '2025-06-01',
         'content-type': 'application/json',
       }
     };

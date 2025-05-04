@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StayCrest Full Test Page</title>
+    
+    <!-- Inline styles first to make sure basic formatting works -->
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .test-section {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        h1 {
+            color: #6366f1; /* Primary color from StayCrest */
+        }
+        
+        h2 {
+            margin-top: 0;
+            color: #4f46e5; /* Secondary color from StayCrest */
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        button {
+            background-color: #6366f1;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background-color: #4f46e5;
+        }
+        
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f0f9ff;
+            border-radius: 4px;
+            min-height: 20px;
+        }
+        
+        .success {
+            color: #0f766e;
+            background-color: #d1fae5;
+        }
+        
+        .error {
+            color: #b91c1c;
+            background-color: #fee2e2;
+        }
+        
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .logger {
+            font-family: monospace;
+            background-color: #1e1e1e;
+            color: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .logger p {
+            margin: 0;
+            padding: 2px 0;
+        }
+        
+        .action-bar {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+    </style>
+    
+    <!-- External CSS (Tests if external CSS files load correctly) -->
+    <link rel="stylesheet" href="test-styles.css">
+</head>
+<body>
+    <h1>StayCrest Component Testing</h1>
+    <p>This page tests various components and functionality to diagnose rendering issues.</p>
+    
+    <div class="action-bar">
+        <button id="runAllTests">Run All Tests</button>
+        <button id="clearLogs">Clear Logs</button>
+    </div>
+    
+    <div class="test-grid">
+        <div class="test-section">
+            <h2>HTML Rendering</h2>
+            <p>This section tests basic HTML rendering and styling.</p>
+            <ul>
+                <li>List items should be properly formatted</li>
+                <li>Typography should be clean and readable</li>
+                <li>Colors should match the StayCrest theme</li>
+            </ul>
+            <button id="testHtml">Test HTML</button>
+            <div id="htmlResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>CSS Functionality</h2>
+            <p>Testing CSS functionality and external CSS loading.</p>
+            <p>The button below should have a green external-css class applied to it.</p>
+            <button id="testCss" class="external-button">Test CSS</button>
+            <div id="cssResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>JavaScript Functionality</h2>
+            <p>Testing JavaScript event handling and DOM manipulation.</p>
+            <button id="testJs">Test JavaScript</button>
+            <div id="jsResult" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>External JavaScript</h2>
+            <p>Testing if external JavaScript files load correctly.</p>
+            <button id="testExternalJs">Test External JS</button>
+            <div id="externalJsResult" class="result"></div>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Console Output</h2>
+        <p>Log messages will appear here:</p>
+        <div id="logger" class="logger"></div>
+    </div>
+    
+    <!-- Inline JavaScript (Tests if JS works in the page) -->
+    <script>
+        // Basic logging utility
+        function log(message, type = 'info') {
+            console.log(message);
+            const logger = document.getElementById('logger');
+            const line = document.createElement('p');
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            
+            if (type === 'error') {
+                line.style.color = '#f87171';
+            } else if (type === 'success') {
+                line.style.color = '#6ee7b7';
+            }
+            
+            logger.appendChild(line);
+            logger.scrollTop = logger.scrollHeight;
+        }
+        
+        // Wait for DOM to be ready
+        document.addEventListener('DOMContentLoaded', function() {
+            log('Page loaded. Ready to run tests.');
+            
+            try {
+                // HTML Test
+                document.getElementById('testHtml').addEventListener('click', function() {
+                    const result = document.getElementById('htmlResult');
+                    result.textContent = 'HTML rendering is working correctly!';
+                    result.classList.add('success');
+                    log('HTML test passed', 'success');
+                });
+                
+                // CSS Test
+                document.getElementById('testCss').addEventListener('click', function() {
+                    const button = document.getElementById('testCss');
+                    const result = document.getElementById('cssResult');
+                    
+                    // Check for the external CSS
+                    const styles = window.getComputedStyle(button);
+                    const hasExternalCss = styles.borderRadius === '20px'; // This is set in test-styles.css
+                    
+                    if (hasExternalCss) {
+                        result.textContent = 'External CSS loaded successfully!';
+                        result.classList.add('success');
+                        log('CSS test passed - External CSS detected', 'success');
+                    } else {
+                        result.textContent = 'External CSS failed to load.';
+                        result.classList.add('error');
+                        log('CSS test failed - External CSS not applied', 'error');
+                    }
+                });
+                
+                // JS Test
+                document.getElementById('testJs').addEventListener('click', function() {
+                    const result = document.getElementById('jsResult');
+                    
+                    // Do some simple DOM manipulation
+                    result.innerHTML = 'JavaScript is working! <strong>This text was dynamically inserted.</strong>';
+                    result.classList.add('success');
+                    
+                    // Change button color
+                    this.style.backgroundColor = '#8B5CF6';
+                    
+                    log('JavaScript test passed', 'success');
+                });
+                
+                // External JS Test
+                document.getElementById('testExternalJs').addEventListener('click', function() {
+                    const result = document.getElementById('externalJsResult');
+                    
+                    // Check if the test function from external JS exists
+                    if (typeof window.testExternalFunction === 'function') {
+                        const testResult = window.testExternalFunction();
+                        result.textContent = testResult;
+                        result.classList.add('success');
+                        log('External JS test passed', 'success');
+                    } else {
+                        result.textContent = 'External JavaScript failed to load.';
+                        result.classList.add('error');
+                        log('External JS test failed - Function not found', 'error');
+                    }
+                });
+                
+                // Run all tests
+                document.getElementById('runAllTests').addEventListener('click', function() {
+                    log('Running all tests...');
+                    document.getElementById('testHtml').click();
+                    document.getElementById('testCss').click();
+                    document.getElementById('testJs').click();
+                    document.getElementById('testExternalJs').click();
+                });
+                
+                // Clear logs
+                document.getElementById('clearLogs').addEventListener('click', function() {
+                    document.getElementById('logger').innerHTML = '';
+                    log('Logs cleared');
+                });
+                
+                // Log initial information
+                log('Document content type: ' + document.contentType);
+                log('HTML test initialized');
+                log('CSS test initialized');
+                log('JS test initialized');
+                log('External JS test initialized');
+            } catch (error) {
+                log('Error during initialization: ' + error.message, 'error');
+            }
+        });
+    </script>
+    
+    <!-- External JavaScript (Tests if external JS files load correctly) -->
+    <script src="test-script.js"></script>
+</body>
+</html> 

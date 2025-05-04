@@ -2,6 +2,7 @@ const { pool } = require('./connection');
 const { runMigrations } = require('./migrate');
 const { seedHotelData } = require('./seeds/hotel_data_seed');
 const winston = require('winston');
+const seedAdminUsers = require('./seeds/admin-users');
 
 // Configure logger
 const logger = winston.createLogger({
@@ -32,6 +33,8 @@ async function initDatabase() {
     // Seed the database
     logger.info('Seeding database with initial data...');
     await seedHotelData();
+    
+    await seedAdminUsers();
     
     logger.info('Database initialization completed successfully');
     return true;

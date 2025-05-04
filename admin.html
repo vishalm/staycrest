@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="StayCrest Admin - User Management">
+    <title>StayCrest Admin | User Management</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="assets/images/StayCrest_LOGO.png">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/fixes.css">
+    <link rel="stylesheet" href="css/admin.css">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+    <div id="app" class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="container">
+                <div class="header__logo">
+                    <a href="index.html">
+                        <img src="assets/images/StayCrest_LOGO.png" alt="StayCrest Logo" class="header__logo-img">
+                    </a>
+                    <span class="admin-badge">Admin Panel</span>
+                </div>
+                
+                <div class="header__actions">
+                    <button id="themeToggle" class="header__theme-toggle" aria-label="Toggle dark mode">
+                        <span class="header__theme-icon" title="Switch to dark mode">🌙</span>
+                    </button>
+                    <div class="header__user">
+                        <div id="userProfile" class="header__user-profile">
+                            <img src="assets/images/avatar-placeholder.jpg" alt="Admin" class="header__user-avatar">
+                            <div class="header__user-dropdown">
+                                <a href="#" class="header__user-link">
+                                    <span>👤</span> Profile
+                                </a>
+                                <a href="#" class="header__user-link">
+                                    <span>⚙️</span> Settings
+                                </a>
+                                <a href="index.html" class="header__user-link header__user-link--logout">
+                                    <span>🚪</span> Logout
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main content -->
+        <main class="main">
+            <div class="container">
+                <div class="admin-layout">
+                    <!-- Sidebar -->
+                    <aside class="admin-sidebar">
+                        <nav class="admin-nav">
+                            <ul class="admin-nav__list">
+                                <li class="admin-nav__item">
+                                    <a href="#" class="admin-nav__link admin-nav__link--active">
+                                        <span class="admin-nav__icon">👥</span>
+                                        <span class="admin-nav__text">Users</span>
+                                    </a>
+                                </li>
+                                <li class="admin-nav__item">
+                                    <a href="#" class="admin-nav__link">
+                                        <span class="admin-nav__icon">🏨</span>
+                                        <span class="admin-nav__text">Hotels</span>
+                                    </a>
+                                </li>
+                                <li class="admin-nav__item">
+                                    <a href="#" class="admin-nav__link">
+                                        <span class="admin-nav__icon">💬</span>
+                                        <span class="admin-nav__text">Messages</span>
+                                    </a>
+                                </li>
+                                <li class="admin-nav__item">
+                                    <a href="#" class="admin-nav__link">
+                                        <span class="admin-nav__icon">📊</span>
+                                        <span class="admin-nav__text">Analytics</span>
+                                    </a>
+                                </li>
+                                <li class="admin-nav__item">
+                                    <a href="#" class="admin-nav__link">
+                                        <span class="admin-nav__icon">⚙️</span>
+                                        <span class="admin-nav__text">Settings</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </nav>
+                    </aside>
+                    
+                    <!-- Content -->
+                    <div class="admin-content">
+                        <div class="admin-header">
+                            <h1 class="admin-title">User Management</h1>
+                            <div class="admin-actions">
+                                <div class="search-box">
+                                    <input type="text" id="userSearch" placeholder="Search users..." class="search-input">
+                                    <button class="search-button">🔍</button>
+                                </div>
+                                <button id="addUserBtn" class="btn btn--primary">Add User</button>
+                            </div>
+                        </div>
+                        
+                        <!-- User list -->
+                        <div class="user-list-container">
+                            <table class="user-table">
+                                <thead>
+                                    <tr>
+                                        <th>User ID</th>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="userTableBody">
+                                    <!-- Will be populated via JavaScript -->
+                                </tbody>
+                            </table>
+                            
+                            <div class="pagination">
+                                <button class="pagination__btn pagination__btn--prev" disabled>Previous</button>
+                                <span class="pagination__info">Page <span id="currentPage">1</span> of <span id="totalPages">1</span></span>
+                                <button class="pagination__btn pagination__btn--next">Next</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="container">
+                <div class="footer__content">
+                    <div class="footer__copyright">
+                        <p>&copy; 2025 StayCrest Admin. All rights reserved.</p>
+                    </div>
+                </div>
+            </div>
+        </footer>
+        
+        <!-- Modal for adding/editing users -->
+        <div class="modal" id="userModal">
+            <div class="modal__overlay"></div>
+            <div class="modal__container">
+                <div class="modal__header">
+                    <h2 class="modal__title" id="modalTitle">Add New User</h2>
+                    <button class="modal__close" id="modalClose">×</button>
+                </div>
+                <div class="modal__content">
+                    <form id="userForm" class="user-form">
+                        <input type="hidden" id="userId" value="">
+                        
+                        <div class="form-group">
+                            <label for="firstName" class="form-label">First Name</label>
+                            <input type="text" id="firstName" class="form-input" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="lastName" class="form-label">Last Name</label>
+                            <input type="text" id="lastName" class="form-input" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" id="email" class="form-input" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="role" class="form-label">Role</label>
+                            <select id="role" class="form-select" required>
+                                <option value="user">User</option>
+                                <option value="admin">Admin</option>
+                                <option value="moderator">Moderator</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="status" class="form-label">Status</label>
+                            <select id="status" class="form-select" required>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="pending">Pending</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" id="password" class="form-input" placeholder="Leave blank to keep current password">
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" class="btn btn--outline" id="cancelBtn">Cancel</button>
+                            <button type="submit" class="btn btn--primary">Save User</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal for confirmation -->
+        <div class="modal" id="confirmModal">
+            <div class="modal__overlay"></div>
+            <div class="modal__container modal__container--small">
+                <div class="modal__header">
+                    <h2 class="modal__title">Confirm Action</h2>
+                    <button class="modal__close" id="confirmModalClose">×</button>
+                </div>
+                <div class="modal__content">
+                    <p id="confirmMessage">Are you sure you want to delete this user?</p>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn--outline" id="cancelConfirmBtn">Cancel</button>
+                        <button type="button" class="btn btn--danger" id="confirmActionBtn">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/app-simple.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html> 

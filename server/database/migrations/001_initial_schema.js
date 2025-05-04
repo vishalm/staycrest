@@ -58,6 +58,11 @@ const up = async () => {
       CREATE INDEX idx_users_first_last_name ON users(first_name, last_name);
     `);
 
+    // If there's a user_roles enum, update it:
+    await client.query(`
+      ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'superadmin' AFTER 'admin'
+    `);
+
     // Create loyalty_accounts table
     await client.query(`
       CREATE TABLE IF NOT EXISTS loyalty_accounts (

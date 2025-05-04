@@ -142,6 +142,11 @@ class User {
         googleId = null, facebookId = null, appleId = null 
       } = userData;
       
+      // Validate role is allowed
+      if (role && !['user', 'moderator', 'admin', 'superadmin'].includes(role)) {
+        throw new Error('Invalid role specified');
+      }
+      
       // Hash password if provided
       let hashedPassword = password;
       if (password && !password.startsWith('$2')) {

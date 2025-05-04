@@ -1,25 +1,32 @@
+/**
+ * StayCrest Fixed Server
+ * A version of the server with all optimizations for rendering HTML pages
+ */
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
 
-// Simple configuration
-const PORT = process.env.PORT || 3000;
+// Use a different port to avoid conflicts
+const PORT = 3003;
+
+// MIME types with proper charset
 const MIME_TYPES = {
-  '.html': 'text/html',
-  '.css': 'text/css',
-  '.js': 'application/javascript',
-  '.json': 'application/json',
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.gif': 'image/gif',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
-  '.txt': 'text/plain',
+  '.txt': 'text/plain; charset=utf-8',
 };
 
-// Simple in-memory database for demo purposes
+// Simple in-memory database for demo purposes (copied from server.js)
 const mockDB = {
   hotels: [
     {
@@ -86,7 +93,7 @@ const server = http.createServer((req, res) => {
  * Handle API requests
  */
 function handleApiRequest(req, res, pathname, parsedUrl) {
-  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -125,17 +132,15 @@ function handleApiRequest(req, res, pathname, parsedUrl) {
           );
         }
         
-        // Send response (delayed to simulate network)
-        setTimeout(() => {
-          res.statusCode = 200;
-          res.end(JSON.stringify({
-            status: 'success',
-            data: {
-              query: query || location,
-              hotels: results
-            }
-          }));
-        }, 500);
+        // Send response
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          status: 'success',
+          data: {
+            query: query || location,
+            hotels: results
+          }
+        }));
       } else {
         res.statusCode = 405;
         res.end(JSON.stringify({ status: 'error', message: 'Method not allowed' }));
@@ -168,17 +173,15 @@ function handleApiRequest(req, res, pathname, parsedUrl) {
               response = `I received your message: "${message}". How can I assist you with your travel plans today?`;
             }
             
-            // Delayed response to simulate thinking
-            setTimeout(() => {
-              res.statusCode = 200;
-              res.end(JSON.stringify({
-                status: 'success',
-                data: {
-                  response,
-                  sessionId
-                }
-              }));
-            }, 1000);
+            // Send response
+            res.statusCode = 200;
+            res.end(JSON.stringify({
+              status: 'success',
+              data: {
+                response,
+                sessionId
+              }
+            }));
           } catch (error) {
             res.statusCode = 400;
             res.end(JSON.stringify({ status: 'error', message: 'Invalid JSON' }));
@@ -242,20 +245,23 @@ function serveStaticFile(res, pathname) {
     if (err) {
       // If file not found
       if (err.code === 'ENOENT') {
+        console.log(`File not found: ${filePath}`);
+        
         // Try index.html for SPA fallback
         if (pathname !== '/index.html') {
           return serveStaticFile(res, '/index.html');
         }
         
         res.statusCode = 404;
-        res.setHeader('Content-Type', 'text/plain');
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.end('404 Not Found');
         return;
       }
       
       // Other server error
+      console.error(`Server error: ${err.message}`);
       res.statusCode = 500;
-      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       res.end('500 Internal Server Error');
       return;
     }
@@ -264,24 +270,7 @@ function serveStaticFile(res, pathname) {
     const contentType = MIME_TYPES[fileExt] || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
     
-    // Ensure HTML files have correct content-type, 
-    // even if MIME_TYPES don't have the correct mapping
-    if (fileExt === '.html') {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    } else if (fileExt === '.css') {
-      res.setHeader('Content-Type', 'text/css; charset=utf-8');
-    } else if (fileExt === '.js') {
-      // If JavaScript module, set proper MIME type
-      if (data.includes('export') || data.includes('import')) {
-        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-      } else {
-        res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-      }
-    } else if (fileExt === '.json') {
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    }
-    
-    // Add cache control headers to improve performance
+    // Add cache control headers
     if (fileExt === '.html') {
       // Don't cache HTML - always get fresh content
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -298,6 +287,7 @@ function serveStaticFile(res, pathname) {
 
 // Start the server
 server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}/`);
+  console.log(`Fixed Server running at http://localhost:${PORT}/`);
   console.log(`API available at http://localhost:${PORT}/api/`);
+  console.log(`Try opening http://localhost:${PORT}/full-test.html to test functionality`);
 }); 

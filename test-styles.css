@@ -1,0 +1,35 @@
+/**
+ * Test Styles for StayCrest Diagnostic
+ * This file tests if external CSS is correctly loaded
+ */
+
+.external-button {
+  border-radius: 20px !important;
+  border: 2px solid #10b981 !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.external-button::after {
+  content: '✓';
+  position: absolute;
+  right: 10px;
+  color: #10b981;
+}
+
+/* Some extra styles to test different CSS features */
+.test-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+  transition: all 0.3s ease;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+.success {
+  animation: pulse 2s infinite;
+} 
