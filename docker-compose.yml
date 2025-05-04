@@ -37,9 +37,9 @@ services:
       - ./test.html:/app/test.html
       - ./full-test.html:/app/full-test.html
       - ./html-check.html:/app/html-check.html
-      - ./app/assets:/app/assets
-      - ./app/css:/app/css
-      - ./app/js:/app/js
+      - ./css:/app/css
+      - ./js:/app/js
+      - ./assets:/app/assets
       - ./app/logs:/app/logs
       - ./app/uploads:/app/uploads
       - ./app/cache:/app/cache

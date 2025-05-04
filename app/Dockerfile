@@ -12,8 +12,11 @@ RUN npm install --legacy-peer-deps
 # Copy source code
 COPY app/ .
 
-# Copy HTML files from root directory
+# Copy HTML files and static assets from root directory
 COPY index.html admin.html admin-login.html test.html full-test.html html-check.html ./
+COPY css/ ./css/
+COPY js/ ./js/
+COPY assets/ ./assets/
 
 # Production stage
 FROM node:18 as production
@@ -24,7 +27,7 @@ WORKDIR /app
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 
-# Copy application files
+# Copy application files and static assets
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/index.html ./
 COPY --from=builder /app/admin.html ./
@@ -32,9 +35,9 @@ COPY --from=builder /app/admin-login.html ./
 COPY --from=builder /app/test.html ./
 COPY --from=builder /app/full-test.html ./
 COPY --from=builder /app/html-check.html ./
-COPY --from=builder /app/assets ./assets
 COPY --from=builder /app/css ./css
 COPY --from=builder /app/js ./js
+COPY --from=builder /app/assets ./assets
 
 # Create necessary directories with proper permissions
 RUN mkdir -p \
@@ -53,7 +56,10 @@ RUN mkdir -p \
         /app/admin-login.html \
         /app/test.html \
         /app/full-test.html \
-        /app/html-check.html
+        /app/html-check.html \
+        /app/css \
+        /app/js \
+        /app/assets
 
 # Switch to non-root user
 USER node
