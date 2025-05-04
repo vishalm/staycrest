@@ -4,6 +4,8 @@ const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../services/auth-service');
 const searchSourcesService = require('../services/search-sources-service');
+const searchAgent = require('../agents/search-agent');
+const logger = require('../services/logging-service').getLogger('api-routes');
 
 // @desc    Main API health check
 // @route   GET /api
@@ -15,6 +17,91 @@ router.get('/', (req, res) => {
     version: '1.0.0',
     time: new Date(),
   });
+});
+
+// @desc    Search hotels
+// @route   GET /api/search
+// @access  Public
+router.get('/search', async (req, res) => {
+  const requestId = `req-${Date.now()}`;
+  const startTime = Date.now();
+
+  try {
+    const { q: query, location, ...filters } = req.query;
+
+    logger.info('Received search request', {
+      requestId,
+      query,
+      location,
+      filters: JSON.stringify(filters),
+      userAgent: req.headers['user-agent'],
+      ip: req.ip
+    });
+
+    if (!query && !location) {
+      logger.warn('Missing search parameters', {
+        requestId,
+        query,
+        location
+      });
+
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please provide a search query or location'
+      });
+    }
+
+    // Combine query and location if both are provided
+    const searchQuery = location ? 
+      `${query || ''} in ${location}`.trim() : 
+      query;
+
+    logger.debug('Processed search query', {
+      requestId,
+      originalQuery: query,
+      location,
+      combinedQuery: searchQuery
+    });
+
+    // Execute search
+    const searchResults = await searchAgent.searchHotels(searchQuery, filters);
+
+    const duration = Date.now() - startTime;
+
+    logger.info('Search request completed', {
+      requestId,
+      duration,
+      resultCount: searchResults.results?.length || 0,
+      query: searchQuery,
+      filters: JSON.stringify(filters)
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        query: searchQuery,
+        ...searchResults
+      }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+
+    logger.error('Search request failed', {
+      requestId,
+      duration,
+      error: error.message,
+      stack: error.stack,
+      query: req.query.q,
+      location: req.query.location
+    });
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to process search request',
+      error: error.message
+    });
+  }
 });
 
 // @desc    Get loyalty programs list
@@ -54,7 +141,11 @@ router.get('/loyalty/programs', (req, res) => {
 // @route   GET /api/search/sources
 // @access  Public
 router.get('/search/sources', (req, res) => {
+  const requestId = `req-${Date.now()}`;
+
   try {
+    logger.debug('Fetching search sources', { requestId });
+
     const sources = {
       loyaltyPrograms: searchSourcesService.getEnabledLoyaltyPrograms(),
       webSearch: searchSourcesService.getEnabledWebSearchProviders(),
@@ -62,11 +153,27 @@ router.get('/search/sources', (req, res) => {
       directBooking: searchSourcesService.getEnabledDirectBookingPlatforms()
     };
     
+    logger.info('Search sources retrieved', {
+      requestId,
+      sourceCounts: {
+        loyaltyPrograms: sources.loyaltyPrograms.length,
+        webSearch: sources.webSearch.length,
+        aggregators: sources.aggregators.length,
+        directBooking: sources.directBooking.length
+      }
+    });
+
     res.status(200).json({
       status: 'success',
       data: sources
     });
   } catch (error) {
+    logger.error('Failed to retrieve search sources', {
+      requestId,
+      error: error.message,
+      stack: error.stack
+    });
+
     res.status(500).json({
       status: 'error',
       message: 'Failed to retrieve search sources',

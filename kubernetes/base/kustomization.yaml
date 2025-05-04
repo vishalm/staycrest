@@ -8,6 +8,8 @@ resources:
 - ../db-cache-config.yaml
 - ../persistent-volumes.yaml
 - ../ollama.yaml
+- ../voice-service.yaml
+- ../voice-adapter.yaml
 - ../elasticsearch.yaml
 - ../grafana.yaml
 - ../prometheus.yaml

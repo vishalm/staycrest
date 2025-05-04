@@ -407,4 +407,5 @@ class ToolManager {
   }
 }
 
-module.exports = new ToolManager();
+// Export the ToolManager class
+module.exports = { ToolManager };

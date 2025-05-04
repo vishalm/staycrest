@@ -293,18 +293,84 @@ services:
 
   # Connection pool manager
   connection-pool:
-    image: tecnativa/tcp-proxy:0.7.0
+    image: haproxy:2.8-alpine
     container_name: staycrest-connection-pool
     restart: unless-stopped
-    environment:
-      - LISTEN_PORT=27117
-      - TALK_PORT=27017
-      - TALK_HOST=mongodb
-      - TIMEOUT=600
+    volumes:
+      - ./config/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
       - "27117:27117"
+      - "8404:8404"  # Stats port
     depends_on:
       - mongodb
+    networks:
+      - staycrest-network
+    healthcheck:
+      test: ["CMD", "haproxy", "-c", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Ollama for LLM support
+  ollama:
+    image: ollama/ollama:latest
+    container_name: staycrest-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+          cpus: '4'
+        reservations:
+          memory: 8G
+          cpus: '2'
+    networks:
+      - staycrest-network
+
+  # Voice Service
+  voice-service:
+    image: ghcr.io/coqui-ai/xtts-streaming-server:latest-cpu
+    platform: linux/amd64
+    container_name: staycrest-voice-service
+    restart: unless-stopped
+    ports:
+      - "5002:80"
+    environment:
+      - COQUI_TOS_AGREED=1
+    volumes:
+      - voice_models:/app/tts_models
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+        reservations:
+          memory: 2G
+          cpus: '1'
+    networks:
+      - staycrest-network
+
+  # Voice Adapter Service
+  voice-adapter:
+    build:
+      context: .
+      dockerfile: Dockerfile.voice-adapter
+      platforms:
+        - linux/arm64
+    container_name: staycrest-voice-adapter
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+    environment:
+      - VOICE_SERVICE_URL=http://voice-service:80
+      - ENABLE_STREAMING=true
+      - LOG_LEVEL=info
+    depends_on:
+      - voice-service
     networks:
       - staycrest-network
 
@@ -318,4 +384,6 @@ volumes:
   elasticsearch_data:
   grafana_data:
   postgres_data:
-  prometheus_data: 
+  prometheus_data:
+  ollama_models:
+  voice_models: 

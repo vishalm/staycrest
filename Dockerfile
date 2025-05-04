@@ -1,71 +1,89 @@
 # Build stage
-FROM node:18-alpine as builder
+FROM --platform=$BUILDPLATFORM node:18-bullseye-slim as builder
 
-# Create app directory
 WORKDIR /app
-
-# Install build dependencies
-RUN apk add --no-cache python3 make g++ git
 
 # Copy package files
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci
 
 # Copy source code
 COPY . .
 
-# Build application if needed
-RUN npm run build
-
 # Production stage
-FROM node:18-alpine
+FROM --platform=$TARGETPLATFORM ubuntu:22.04 as production
+
+WORKDIR /app
+
+# Avoid prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Node.js and other dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y \
+    nodejs \
+    ffmpeg \
+    sox \
+    python3 \
+    python3-pip \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --no-cache-dir \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        torch \
+        torchaudio \
+        numpy \
+        soundfile \
+        librosa
 
 # Create app directory and use non-root user
-WORKDIR /app
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S staycrest -u 1001 && \
+RUN groupadd -g 1001 nodejs && \
+    useradd -u 1001 -g nodejs -s /bin/bash -m staycrest && \
     chown -R staycrest:nodejs /app
 
-# Install production dependencies
-RUN apk add --no-cache dumb-init curl tini tzdata
+# Create necessary directories with proper permissions
+RUN mkdir -p \
+    /app/logs \
+    /app/uploads \
+    /app/cache \
+    && chown -R staycrest:nodejs \
+        /app/logs \
+        /app/uploads \
+        /app/cache
 
-# Set node environment
-ENV NODE_ENV=production
-ENV TZ=UTC
+# Copy package files
+COPY package*.json ./
 
-# Set default values for worker threads and process count
-ENV WORKER_THREADS=4
-ENV WORKER_PROCESSES=2
-ENV ENABLE_METRICS=true
-ENV ENABLE_TRACING=true
+# Install production dependencies only
+RUN npm ci --only=production
 
-# Create necessary directories
-RUN mkdir -p /app/logs /app/data && \
-    chown -R staycrest:nodejs /app/logs /app/data
+# Copy source files
+COPY . .
 
-# Copy from builder stage
-COPY --from=builder --chown=staycrest:nodejs /app/node_modules /app/node_modules
-COPY --from=builder --chown=staycrest:nodejs /app/package.json /app/package.json
-COPY --from=builder --chown=staycrest:nodejs /app/server /app/server
-COPY --from=builder --chown=staycrest:nodejs /app/cluster.js /app/cluster.js
-COPY --from=builder --chown=staycrest:nodejs /app/server.js /app/server.js
-COPY --from=builder --chown=staycrest:nodejs /app/kubernetes /app/kubernetes
-COPY --from=builder --chown=staycrest:nodejs /app/monitoring /app/monitoring
+# Set environment variables
+ENV NODE_ENV=production \
+    PORT=3000 \
+    LOG_LEVEL=info \
+    ENABLE_WEBSOCKET=true \
+    CACHE_TTL=3600 \
+    MAX_UPLOAD_SIZE=50mb
+
+# Add volume mount points
+VOLUME ["/app/logs", "/app/uploads", "/app/cache"]
 
 # Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:3000/api/health/liveness || exit 1
+  CMD curl -f http://localhost:3000/health || exit 1
 
 # Switch to non-root user
 USER staycrest
 
-# Expose ports
-EXPOSE 3000 9091
+# Expose API port
+EXPOSE 3000
 
-# Run application with tini for proper PID 1 handling
-ENTRYPOINT ["/sbin/tini", "--"]
-
-# Default to running in cluster mode for production
-CMD ["node", "cluster.js"] 
+# Start in production mode
+CMD ["npm", "start"] 

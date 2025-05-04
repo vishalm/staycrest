@@ -17,15 +17,20 @@ export class VoiceService {
   constructor(enabled = true, options = {}) {
     this.enabled = enabled;
     this.options = {
-      provider: 'browser', // browser, ollama, playai, elevenlabs
+      provider: 'browser',
       language: 'en-US',
-      continuous: true,
+      continuous: false,
       autoSubmit: true,
       voiceSpeed: 1,
       voicePitch: 1,
       voiceVolume: 1,
       ...options
     };
+    
+    // State
+    this.isInitialized = false;
+    this.isListening = false;
+    this.hasPermission = false;
     
     // Initialize speech recognition if available
     this.recognition = null;
@@ -40,38 +45,47 @@ export class VoiceService {
     this.onEnd = null;
     this.onResult = null;
     this.onError = null;
-    
-    // Check browser support
-    this.checkBrowserSupport();
   }
   
   /**
-   * Check if the browser supports speech recognition and synthesis
+   * Check if browser supports speech recognition
+   * @returns {boolean} Whether speech recognition is supported
    */
   checkBrowserSupport() {
-    this.recognitionSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
-    this.synthesisSupported = 'speechSynthesis' in window;
+    const recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const synthesis = 'speechSynthesis' in window;
     
-    if (!this.recognitionSupported) {
-      console.warn('Speech recognition is not supported in this browser');
-    }
+    this.recognitionSupported = !!recognition;
+    this.synthesisSupported = synthesis;
     
-    if (!this.synthesisSupported) {
-      console.warn('Speech synthesis is not supported in this browser');
-    }
+    return this.recognitionSupported && this.synthesisSupported;
   }
   
   /**
    * Initialize speech recognition
    */
-  initSpeechRecognition() {
-    if (!this.recognitionSupported || !this.enabled) return;
+  async initSpeechRecognition() {
+    if (this.isInitialized || !this.enabled) return;
     
-    // Use the appropriate speech recognition interface
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    // Check browser support
+    if (!this.checkBrowserSupport()) {
+      console.error('Speech recognition not supported in this browser');
+      return;
+    }
     
-    if (SpeechRecognition) {
+    try {
+      // Request microphone permission
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.hasPermission = true;
+      
+      // Stop the stream immediately as we only needed it for permission
+      stream.getTracks().forEach(track => track.stop());
+      
+      // Initialize speech recognition
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       this.recognition = new SpeechRecognition();
+      
+      // Configure recognition
       this.recognition.lang = this.options.language;
       this.recognition.continuous = this.options.continuous;
       this.recognition.interimResults = true;
@@ -81,6 +95,12 @@ export class VoiceService {
       this.recognition.onend = this.handleRecognitionEnd.bind(this);
       this.recognition.onresult = this.handleRecognitionResult.bind(this);
       this.recognition.onerror = this.handleRecognitionError.bind(this);
+      
+      this.isInitialized = true;
+    } catch (error) {
+      console.error('Error initializing speech recognition:', error);
+      this.hasPermission = false;
+      throw error;
     }
   }
   
@@ -90,25 +110,37 @@ export class VoiceService {
    * @param {Function} onStart - Callback for recognition start
    * @param {Function} onEnd - Callback for recognition end
    * @param {Function} onError - Callback for recognition errors
+   * @returns {Promise<boolean>} Whether recognition was started successfully
    */
-  startListening(onResult, onStart, onEnd, onError) {
-    if (!this.recognitionSupported || !this.enabled || !this.recognition) {
-      if (onError) onError(new Error('Speech recognition not supported or not enabled'));
+  async startListening(onResult, onStart, onEnd, onError) {
+    if (!this.enabled) {
+      if (onError) onError(new Error('Voice service is not enabled'));
       return false;
     }
     
-    // Set callback functions if provided
-    if (onResult) this.onResult = onResult;
-    if (onStart) this.onStart = onStart;
-    if (onEnd) this.onEnd = onEnd;
-    if (onError) this.onError = onError;
-    
     try {
+      // Initialize if not already done
+      if (!this.isInitialized) {
+        await this.initSpeechRecognition();
+      }
+      
+      if (!this.recognition || !this.hasPermission) {
+        throw new Error('Speech recognition not initialized or permission denied');
+      }
+      
+      // Set callback functions
+      this.onResult = onResult;
+      this.onStart = onStart;
+      this.onEnd = onEnd;
+      this.onError = onError;
+      
+      // Start recognition
       this.recognition.start();
+      this.isListening = true;
       return true;
     } catch (error) {
       console.error('Error starting speech recognition:', error);
-      if (this.onError) this.onError(error);
+      if (onError) onError(error);
       return false;
     }
   }
@@ -117,9 +149,10 @@ export class VoiceService {
    * Stop speech recognition
    */
   stopListening() {
-    if (this.recognition) {
+    if (this.recognition && this.isListening) {
       try {
         this.recognition.stop();
+        this.isListening = false;
       } catch (error) {
         console.error('Error stopping speech recognition:', error);
       }
@@ -131,6 +164,7 @@ export class VoiceService {
    * @param {Event} event - Recognition start event
    */
   handleRecognitionStart(event) {
+    this.isListening = true;
     console.log('Speech recognition started');
     if (this.onStart) this.onStart(event);
   }
@@ -140,20 +174,9 @@ export class VoiceService {
    * @param {Event} event - Recognition end event
    */
   handleRecognitionEnd(event) {
+    this.isListening = false;
     console.log('Speech recognition ended');
     if (this.onEnd) this.onEnd(event);
-    
-    // Restart if continuous mode is enabled
-    if (this.options.continuous && this.enabled) {
-      try {
-        this.recognition.start();
-      } catch (error) {
-        // Ignore already started errors
-        if (error.name !== 'InvalidStateError') {
-          console.error('Error restarting speech recognition:', error);
-        }
-      }
-    }
   }
   
   /**
@@ -188,22 +211,30 @@ export class VoiceService {
    * @param {Event} event - Recognition error event
    */
   handleRecognitionError(event) {
+    this.isListening = false;
     console.error('Speech recognition error:', event.error);
     
-    if (this.onError) this.onError(new Error(event.error));
-    
-    // Attempt to restart after network errors
-    if (event.error === 'network' && this.enabled) {
-      setTimeout(() => {
-        try {
-          this.recognition.start();
-        } catch (error) {
-          // Ignore already started errors
-          if (error.name !== 'InvalidStateError') {
-            console.error('Error restarting speech recognition:', error);
-          }
-        }
-      }, 1000);
+    if (this.onError) {
+      let errorMessage = 'Speech recognition error';
+      
+      switch (event.error) {
+        case 'not-allowed':
+          errorMessage = 'Microphone access denied';
+          break;
+        case 'no-speech':
+          errorMessage = 'No speech detected';
+          break;
+        case 'network':
+          errorMessage = 'Network error occurred';
+          break;
+        case 'aborted':
+          errorMessage = 'Recognition was aborted';
+          break;
+        default:
+          errorMessage = `Recognition error: ${event.error}`;
+      }
+      
+      this.onError(new Error(errorMessage));
     }
   }
   

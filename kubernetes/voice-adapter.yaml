@@ -1,0 +1,409 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-adapter
+  labels:
+    app: staycrest
+    component: voice-adapter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: staycrest
+      component: voice-adapter
+  template:
+    metadata:
+      labels:
+        app: staycrest
+        component: voice-adapter
+    spec:
+      containers:
+      - name: voice-adapter
+        image: node:18-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3200
+          name: http
+        env:
+        - name: VOICE_SERVICE_URL
+          value: "http://voice-service:5002"
+        - name: WHISPER_SERVICE_URL
+          value: "http://voice-service:9000"
+        - name: OLLAMA_URL
+          value: "http://ollama:11434"
+        - name: ENABLE_STREAMING
+          value: "true"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: DEFAULT_VOICE
+          value: "female-1"
+        - name: DEFAULT_STT_MODEL
+          value: "whisper-medium"
+        - name: DEFAULT_TTS_MODEL
+          value: "tacotron2-ddc"
+        - name: ENABLE_WEBSOCKET
+          value: "true"
+        - name: RATE_LIMIT 
+          value: "100"
+        - name: CACHE_TTL
+          value: "3600"
+        command:
+        - "/bin/sh"
+        - "-c"
+        - |
+          mkdir -p /app
+          cd /app
+          
+          # Create package.json
+          cat > package.json << 'EOF'
+          {
+            "name": "voice-adapter",
+            "version": "1.0.0",
+            "description": "Voice adapter service for StayCrest",
+            "main": "server.js",
+            "scripts": {
+              "start": "node server.js"
+            },
+            "dependencies": {
+              "express": "^4.18.2",
+              "axios": "^1.3.4",
+              "body-parser": "^1.20.2",
+              "cors": "^2.8.5",
+              "ws": "^8.13.0",
+              "multer": "^1.4.5-lts.1",
+              "winston": "^3.8.2",
+              "form-data": "^4.0.0",
+              "fs-extra": "^11.1.1"
+            }
+          }
+          EOF
+          
+          # Create voice adapter server.js
+          cat > server.js << 'EOF'
+          const express = require('express');
+          const axios = require('axios');
+          const bodyParser = require('body-parser');
+          const cors = require('cors');
+          const multer = require('multer');
+          const winston = require('winston');
+          const FormData = require('form-data');
+          const fs = require('fs-extra');
+          const WebSocket = require('ws');
+          const http = require('http');
+          const path = require('path');
+          
+          // Environment variables
+          const voiceServiceUrl = process.env.VOICE_SERVICE_URL || 'http://voice-service:5002';
+          const whisperServiceUrl = process.env.WHISPER_SERVICE_URL || 'http://voice-service:9000';
+          const ollamaUrl = process.env.OLLAMA_URL || 'http://ollama:11434';
+          const enableStreaming = process.env.ENABLE_STREAMING === 'true';
+          const logLevel = process.env.LOG_LEVEL || 'info';
+          const defaultVoice = process.env.DEFAULT_VOICE || 'female-1';
+          const defaultSttModel = process.env.DEFAULT_STT_MODEL || 'whisper-medium';
+          const defaultTtsModel = process.env.DEFAULT_TTS_MODEL || 'tacotron2-ddc';
+          const enableWebsocket = process.env.ENABLE_WEBSOCKET === 'true';
+          const rateLimit = parseInt(process.env.RATE_LIMIT || '100');
+          const cacheTtl = parseInt(process.env.CACHE_TTL || '3600');
+          
+          // Configure logger
+          const logger = winston.createLogger({
+            level: logLevel,
+            format: winston.format.combine(
+              winston.format.timestamp(),
+              winston.format.json()
+            ),
+            transports: [
+              new winston.transports.Console()
+            ]
+          });
+          
+          // Set up Express
+          const app = express();
+          app.use(cors());
+          app.use(bodyParser.json());
+          
+          // Configure storage for audio files
+          const storage = multer.diskStorage({
+            destination: (req, file, cb) => {
+              const uploadDir = '/tmp/audio-uploads';
+              fs.ensureDirSync(uploadDir);
+              cb(null, uploadDir);
+            },
+            filename: (req, file, cb) => {
+              cb(null, `${Date.now()}-${file.originalname}`);
+            }
+          });
+          
+          const upload = multer({ storage });
+          
+          // Create HTTP server for WebSockets support
+          const server = http.createServer(app);
+          
+          // Basic route
+          app.get('/', (req, res) => {
+            res.json({
+              status: 'ok',
+              service: 'voice-adapter',
+              stt_url: whisperServiceUrl,
+              tts_url: voiceServiceUrl,
+              ollama_url: ollamaUrl
+            });
+          });
+          
+          // Health check
+          app.get('/health', (req, res) => {
+            res.json({ status: 'ok' });
+          });
+          
+          // Speech to Text route
+          app.post('/api/stt', upload.single('audio'), async (req, res) => {
+            try {
+              if (!req.file) {
+                return res.status(400).json({ error: 'No audio file provided' });
+              }
+              
+              const model = req.query.model || defaultSttModel;
+              logger.info(`Processing STT request with model: ${model}`);
+              
+              const formData = new FormData();
+              formData.append('audio_file', fs.createReadStream(req.file.path));
+              formData.append('model', model.replace('whisper-', ''));
+              
+              const response = await axios.post(
+                `${whisperServiceUrl}/asr`, 
+                formData, 
+                { headers: { ...formData.getHeaders() } }
+              );
+              
+              // Clean up the temp file
+              fs.unlinkSync(req.file.path);
+              
+              res.json({
+                text: response.data.text,
+                model: model,
+                language: response.data.language || 'en'
+              });
+            } catch (error) {
+              logger.error('STT error:', error);
+              res.status(500).json({ error: 'Failed to process speech to text' });
+            }
+          });
+          
+          // Text to Speech route
+          app.post('/api/tts', async (req, res) => {
+            try {
+              const { text, voice, model } = req.body;
+              
+              if (!text) {
+                return res.status(400).json({ error: 'No text provided' });
+              }
+              
+              const selectedVoice = voice || defaultVoice;
+              const selectedModel = model || defaultTtsModel;
+              
+              logger.info(`Processing TTS request: voice=${selectedVoice}, model=${selectedModel}`);
+              
+              const response = await axios.post(
+                `${voiceServiceUrl}/api/tts`, 
+                {
+                  text: text,
+                  voice_name: selectedVoice,
+                  model_name: selectedModel
+                },
+                { responseType: 'arraybuffer' }
+              );
+              
+              res.set('Content-Type', 'audio/wav');
+              res.send(response.data);
+            } catch (error) {
+              logger.error('TTS error:', error);
+              res.status(500).json({ error: 'Failed to process text to speech' });
+            }
+          });
+          
+          // Voice Chat route - combines STT, LLM, and TTS
+          app.post('/api/voice-chat', upload.single('audio'), async (req, res) => {
+            try {
+              if (!req.file) {
+                return res.status(400).json({ error: 'No audio file provided' });
+              }
+              
+              const model = req.query.llm_model || 'llama2';
+              const voiceId = req.query.voice || defaultVoice;
+              const sttModel = req.query.stt_model || defaultSttModel;
+              const ttsModel = req.query.tts_model || defaultTtsModel;
+              
+              logger.info(`Processing voice chat: llm=${model}, voice=${voiceId}, stt=${sttModel}, tts=${ttsModel}`);
+              
+              // Step 1: Convert speech to text
+              const formData = new FormData();
+              formData.append('audio_file', fs.createReadStream(req.file.path));
+              formData.append('model', sttModel.replace('whisper-', ''));
+              
+              const sttResponse = await axios.post(
+                `${whisperServiceUrl}/asr`, 
+                formData, 
+                { headers: { ...formData.getHeaders() } }
+              );
+              
+              const transcribedText = sttResponse.data.text;
+              logger.info(`Transcribed text: ${transcribedText}`);
+              
+              // Step 2: Send to LLM
+              const ollamaResponse = await axios.post(`${ollamaUrl}/api/generate`, {
+                model: model,
+                prompt: transcribedText,
+                stream: false
+              });
+              
+              const llmResponse = ollamaResponse.data.response;
+              logger.info(`LLM response: ${llmResponse}`);
+              
+              // Step 3: Convert back to speech
+              const ttsResponse = await axios.post(
+                `${voiceServiceUrl}/api/tts`, 
+                {
+                  text: llmResponse,
+                  voice_name: voiceId,
+                  model_name: ttsModel
+                },
+                { responseType: 'arraybuffer' }
+              );
+              
+              // Clean up the temp file
+              fs.unlinkSync(req.file.path);
+              
+              // Return audio response
+              res.set('Content-Type', 'audio/wav');
+              res.send(ttsResponse.data);
+            } catch (error) {
+              logger.error('Voice chat error:', error);
+              res.status(500).json({ error: 'Failed to process voice chat' });
+            }
+          });
+          
+          // Voice configuration API
+          app.get('/api/voice/config', async (req, res) => {
+            try {
+              // Fetch voice configuration from voice service
+              const response = await axios.get(`${voiceServiceUrl}/api/voices`);
+              res.json(response.data);
+            } catch (error) {
+              logger.error('Voice config error:', error);
+              res.status(500).json({ error: 'Failed to fetch voice configuration' });
+            }
+          });
+          
+          // WebSocket server setup for streaming
+          if (enableWebsocket) {
+            const wss = new WebSocket.Server({ server });
+            
+            wss.on('connection', (ws) => {
+              logger.info('WebSocket client connected');
+              
+              ws.on('message', async (message) => {
+                try {
+                  const data = JSON.parse(message);
+                  
+                  // Handle different types of WebSocket messages
+                  if (data.type === 'stt_stream') {
+                    // Process streaming STT
+                    // Implementation depends on voice service WebSocket support
+                  } else if (data.type === 'tts_request') {
+                    // Process TTS request via WebSocket
+                    const { text, voice, model } = data;
+                    
+                    try {
+                      const response = await axios.post(
+                        `${voiceServiceUrl}/api/tts`, 
+                        {
+                          text: text,
+                          voice_name: voice || defaultVoice,
+                          model_name: model || defaultTtsModel
+                        },
+                        { responseType: 'arraybuffer' }
+                      );
+                      
+                      // Convert audio buffer to base64
+                      const audioBase64 = Buffer.from(response.data).toString('base64');
+                      
+                      ws.send(JSON.stringify({
+                        type: 'tts_response',
+                        audio: audioBase64,
+                        format: 'wav',
+                        success: true
+                      }));
+                    } catch (error) {
+                      ws.send(JSON.stringify({
+                        type: 'error',
+                        message: 'Failed to process text to speech',
+                        success: false
+                      }));
+                    }
+                  }
+                } catch (error) {
+                  logger.error('WebSocket error:', error);
+                  ws.send(JSON.stringify({ 
+                    type: 'error', 
+                    message: 'Failed to process request' 
+                  }));
+                }
+              });
+              
+              ws.on('close', () => {
+                logger.info('WebSocket client disconnected');
+              });
+            });
+          }
+          
+          // Start the server
+          const PORT = process.env.PORT || 3200;
+          server.listen(PORT, () => {
+            logger.info(`Voice adapter server running on port ${PORT}`);
+            logger.info(`STT Service URL: ${whisperServiceUrl}`);
+            logger.info(`TTS Service URL: ${voiceServiceUrl}`);
+            logger.info(`Ollama URL: ${ollamaUrl}`);
+          });
+          EOF
+          
+          # Install dependencies and start server
+          npm install
+          npm start
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3200
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3200
+          initialDelaySeconds: 20
+          periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-adapter
+  labels:
+    app: staycrest
+    component: voice-adapter
+spec:
+  selector:
+    app: staycrest
+    component: voice-adapter
+  ports:
+  - port: 80
+    targetPort: 3200
+    name: http
+  type: ClusterIP 

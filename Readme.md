@@ -298,6 +298,10 @@ StayCrest uses Persistent Volume Claims (PVCs) for all stateful components to en
    - Grafana: 5GB storage for dashboards and configurations (`grafana-data-pvc`)
    - Application Logs: 8GB storage for centralized logging (`app-logs-pvc`)
 
+4. **Voice Processing**
+   - Voice Models: 15GB storage for STT/TTS models (`voice-models-pvc`)
+   - Shared between Whisper (STT) and Coqui TTS services
+
 To manage persistent volumes:
 
 ```bash
@@ -316,6 +320,55 @@ The Ollama service is deployed with:
 - GPU support when available (using NVIDIA runtime)
 - Full persistence of models across restarts
 - Dedicated service endpoint for AI inference
+
+### Voice Services and Speech Processing
+
+StayCrest includes comprehensive voice processing capabilities running on Kubernetes:
+
+1. **Speech-to-Text (STT/ASR)**
+   - Whisper models for accurate speech recognition
+   - Multi-language support via MMS model
+   - Distil-Whisper for faster, lighter processing
+   - Full integration with Ollama for model management
+
+2. **Text-to-Speech (TTS)**
+   - Coqui TTS for high-quality voice synthesis
+   - Multiple voice options (male/female)
+   - Support for XTTS for natural-sounding speech
+   - Model caching for improved performance
+
+3. **Voice Chat Adapter**
+   - End-to-end voice interaction with LLMs
+   - WebSocket support for streaming audio
+   - Voice configuration management API
+   - Seamless integration with Ollama and LLMs
+
+4. **API Integration**
+   - RESTful endpoints for all voice services
+   - Support for audio file uploads and streaming
+   - WebSocket interface for real-time applications
+   - Built-in rate limiting and monitoring
+
+To access voice services:
+
+```bash
+# Forward the voice adapter port
+kubectl port-forward svc/voice-adapter 3200:80 -n staycrest
+
+# Test STT (Speech-to-Text)
+curl -X POST -F "audio=@./sample.wav" http://localhost:3200/api/stt
+
+# Test TTS (Text-to-Speech)
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"text":"Welcome to StayCrest. How may I help you?","voice":"female-1"}' \
+  --output response.wav \
+  http://localhost:3200/api/tts
+
+# Test full voice chat (speech in, speech out)
+curl -X POST -F "audio=@./question.wav" http://localhost:3200/api/voice-chat
+```
+
+All voice models run within the Kubernetes cluster with no dependency on external services, ensuring privacy and offline operation capability.
 
 To access Grafana dashboards:
 

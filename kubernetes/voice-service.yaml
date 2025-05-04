@@ -1,0 +1,246 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-service
+  labels:
+    app: staycrest
+    component: voice-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: staycrest
+      component: voice-service
+  template:
+    metadata:
+      labels:
+        app: staycrest
+        component: voice-service
+    spec:
+      containers:
+      - name: voice-service
+        image: ghcr.io/coqui-ai/tts:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5002
+          name: tts-api
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+            nvidia.com/gpu: "1"  # Optional GPU for voice processing
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+        env:
+        - name: OLIVIA_OLLAMA_HOST
+          value: "ollama:11434"
+        - name: OLIVIA_CACHE_DIR
+          value: "/models/voice"
+        - name: OLIVIA_USE_GPU
+          value: "true"
+        - name: WHISPER_MODEL_SIZE
+          value: "medium"  # Options: tiny, base, small, medium, large
+        - name: TTS_MODEL
+          value: "tts_models/en/ljspeech/tacotron2-DDC"
+        volumeMounts:
+        - name: voice-models
+          mountPath: /models/voice
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5002
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5002
+          initialDelaySeconds: 90
+          periodSeconds: 20
+      - name: whisper-service
+        image: onerahmet/openai-whisper-asr-webservice:latest
+        ports:
+        - containerPort: 9000
+          name: stt-api
+        env:
+        - name: ASR_MODEL
+          value: "medium"
+        - name: ASR_ENGINE
+          value: "openai_whisper"
+        - name: OLLAMA_BASE_URL
+          value: "http://ollama:11434"
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+        volumeMounts:
+        - name: voice-models
+          mountPath: /app/models
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+      volumes:
+      - name: voice-models
+        persistentVolumeClaim:
+          claimName: voice-models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-service
+  labels:
+    app: staycrest
+    component: voice-service
+spec:
+  selector:
+    app: staycrest
+    component: voice-service
+  ports:
+  - port: 5002
+    targetPort: 5002
+    name: tts
+  - port: 9000
+    targetPort: 9000
+    name: stt
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: voice-models-pvc
+  labels:
+    app: staycrest
+    component: voice-service
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi
+  storageClassName: standard
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-model-puller
+  labels:
+    app: staycrest
+    component: voice-service-init
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: staycrest
+        component: voice-service-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: model-puller
+        image: curlimages/curl:latest
+        command:
+        - "/bin/sh"
+        - "-c"
+        - |
+          # Wait for Ollama service to be ready
+          echo "Waiting for Ollama service to be ready..."
+          sleep 30
+          
+          # Pull whisper model via Ollama
+          echo "Pulling Whisper model for ASR/STT..."
+          curl -X POST http://ollama:11434/api/pull -d '{"name":"whisper"}'
+          
+          # Pull MMS model for multilingual support
+          echo "Pulling MMS multilingual model..."
+          curl -X POST http://ollama:11434/api/pull -d '{"name":"mms"}'
+          
+          echo "All voice models pulled successfully!"
+      volumes:
+      - name: voice-models
+        persistentVolumeClaim:
+          claimName: voice-models-pvc
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-service-config
+  labels:
+    app: staycrest
+    component: voice-service
+data:
+  config.yaml: |
+    stt:
+      default_model: "whisper-medium"
+      available_models:
+        - name: "whisper-tiny"
+          description: "Fast with lower accuracy"
+          language: "en"
+          model_path: "whisper-tiny"
+        - name: "whisper-base"
+          description: "Balanced performance"
+          language: "en"
+          model_path: "whisper-base"
+        - name: "whisper-medium"
+          description: "High accuracy"
+          language: "en"
+          model_path: "whisper-medium"
+        - name: "whisper-large"
+          description: "Best accuracy, slow"
+          language: "en"
+          model_path: "whisper-large"
+      supported_languages:
+        - code: "en"
+          name: "English"
+        - code: "es"
+          name: "Spanish"
+        - code: "fr"
+          name: "French"
+        - code: "de"
+          name: "German"
+        
+    tts:
+      default_model: "tacotron2-ddc"
+      available_models:
+        - name: "tacotron2-ddc"
+          description: "High quality voice generation"
+          language: "en"
+          model_path: "tts_models/en/ljspeech/tacotron2-DDC"
+        - name: "glow-tts"
+          description: "Fast voice generation"
+          language: "en"
+          model_path: "tts_models/en/ljspeech/glow-tts"
+      supported_languages:
+        - code: "en"
+          name: "English"
+      
+    voices:
+      - id: "male-1"
+        name: "David"
+        gender: "male"
+        language: "en"
+      - id: "female-1"
+        name: "Sarah"
+        gender: "female"
+        language: "en"
+      - id: "female-2"
+        name: "Emma"
+        gender: "female"
+        language: "en"
+      
+    audio:
+      sample_rate: 22050
+      channels: 1
+      format: "wav"
+      
+    api:
+      enable_streaming: true
+      max_audio_length_seconds: 60
+      rate_limit: 100
+      cors_enabled: true 

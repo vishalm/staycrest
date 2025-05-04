@@ -39,4 +39,11 @@ configMapGenerator:
     - DB_CACHE_METRICS=true
     - REDIS_MAX_MEMORY=512mb
     - MONGODB_QUERY_CACHE_SIZE=128mb
-    - PGBOUNCER_MAX_CONNECTIONS=50 
+    - PGBOUNCER_MAX_CONNECTIONS=50
+    # Voice Processing Configuration
+    - ENABLE_VOICE_SERVICES=true
+    - DEFAULT_STT_MODEL=whisper-base
+    - DEFAULT_TTS_MODEL=tacotron2-ddc
+    - DEFAULT_VOICE=female-1
+    - VOICE_STREAMING=true
+    - WHISPER_MODEL_SIZE=base 

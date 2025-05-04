@@ -29,15 +29,24 @@ export function initVoiceControls(options = {}) {
   /**
    * Initialize voice controls
    */
-  function init() {
-    // Create voice service
-    state.voiceService = new VoiceService(true);
-    
-    // Set up event handlers
-    setupEventListeners();
-    
-    // Check browser support
-    checkSupportAndUpdateUI();
+  async function init() {
+    try {
+      // Create voice service
+      state.voiceService = new VoiceService(true, {
+        continuous: false,
+        autoSubmit: true,
+        language: 'en-US'
+      });
+      
+      // Set up event handlers
+      setupEventListeners();
+      
+      // Check browser support and update UI
+      await checkSupportAndUpdateUI();
+    } catch (error) {
+      console.error('Error initializing voice controls:', error);
+      updateButtonState('error');
+    }
   }
   
   /**
@@ -45,7 +54,7 @@ export function initVoiceControls(options = {}) {
    */
   function setupEventListeners() {
     if (voiceButton) {
-      voiceButton.addEventListener('click', toggleVoiceInput);
+      voiceButton.addEventListener('click', handleVoiceButtonClick);
     }
     
     if (voiceCancelButton) {
@@ -71,80 +80,161 @@ export function initVoiceControls(options = {}) {
   /**
    * Check if browser supports speech recognition and update UI accordingly
    */
-  function checkSupportAndUpdateUI() {
-    const supported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
-    
-    if (!supported && voiceButton) {
-      voiceButton.disabled = true;
-      voiceButton.title = 'Voice input not supported in this browser';
-      voiceButton.classList.add('voice-unsupported');
+  async function checkSupportAndUpdateUI() {
+    try {
+      const supported = state.voiceService.checkBrowserSupport();
+      
+      if (!supported && voiceButton) {
+        voiceButton.disabled = true;
+        voiceButton.title = 'Voice input not supported in this browser';
+        voiceButton.classList.add('voice-unsupported');
+        return false;
+      }
+      
+      // Request microphone permission
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      
+      updateButtonState('ready');
+      return true;
+    } catch (error) {
+      console.error('Error checking voice support:', error);
+      updateButtonState('error');
+      return false;
     }
   }
   
   /**
-   * Toggle voice input on/off
+   * Handle voice button click
    */
-  function toggleVoiceInput() {
-    if (state.isListening) {
-      stopListening();
-    } else {
-      startListening();
+  async function handleVoiceButtonClick() {
+    try {
+      if (state.isListening) {
+        await stopListening();
+      } else {
+        await startListening();
+      }
+    } catch (error) {
+      console.error('Error handling voice button click:', error);
+      updateButtonState('error');
     }
   }
   
   /**
    * Start voice recognition
    */
-  function startListening() {
+  async function startListening() {
     if (state.isListening) return;
     
-    state.isListening = true;
-    
-    // Show voice feedback UI
-    if (voiceFeedback) {
-      voiceFeedback.classList.remove('hidden');
-      voiceText.textContent = 'Listening...';
-    }
-    
-    // Start voice recognition
-    state.voiceService.startListening(
-      handleVoiceResult,
-      handleVoiceStart,
-      handleVoiceEnd,
-      handleVoiceError
-    );
-    
-    // Start visualizer animation
-    startVisualizerAnimation();
-    
-    // Call onVoiceStart callback if provided
-    if (typeof options.onVoiceStart === 'function') {
-      options.onVoiceStart();
+    try {
+      updateButtonState('starting');
+      
+      const started = await state.voiceService.startListening(
+        handleVoiceResult,
+        handleVoiceStart,
+        handleVoiceEnd,
+        handleVoiceError
+      );
+      
+      if (started) {
+        state.isListening = true;
+        updateButtonState('listening');
+        showVoiceFeedback();
+        startVisualizerAnimation();
+        
+        // Call onVoiceStart callback if provided
+        if (typeof options.onVoiceStart === 'function') {
+          options.onVoiceStart();
+        }
+      } else {
+        throw new Error('Failed to start voice recognition');
+      }
+    } catch (error) {
+      console.error('Error starting voice recognition:', error);
+      updateButtonState('error');
+      handleVoiceError(error);
     }
   }
   
   /**
    * Stop voice recognition
    */
-  function stopListening() {
+  async function stopListening() {
     if (!state.isListening) return;
     
-    state.isListening = false;
+    try {
+      state.isListening = false;
+      state.voiceService.stopListening();
+      
+      updateButtonState('ready');
+      hideVoiceFeedback();
+      stopVisualizerAnimation();
+      
+      // Call onVoiceEnd callback if provided
+      if (typeof options.onVoiceEnd === 'function') {
+        options.onVoiceEnd();
+      }
+    } catch (error) {
+      console.error('Error stopping voice recognition:', error);
+      updateButtonState('error');
+    }
+  }
+  
+  /**
+   * Update voice button state and appearance
+   * @param {'ready'|'starting'|'listening'|'error'} state - Button state
+   */
+  function updateButtonState(state) {
+    if (!voiceButton) return;
     
-    // Hide voice feedback UI
+    // Remove all state classes
+    voiceButton.classList.remove(
+      'voice-ready',
+      'voice-starting',
+      'voice-listening',
+      'voice-error'
+    );
+    
+    // Add appropriate state class
+    voiceButton.classList.add(`voice-${state}`);
+    
+    // Update button text/icon based on state
+    switch (state) {
+      case 'ready':
+        voiceButton.title = 'Start voice input';
+        voiceButton.disabled = false;
+        break;
+      case 'starting':
+        voiceButton.title = 'Starting voice input...';
+        voiceButton.disabled = true;
+        break;
+      case 'listening':
+        voiceButton.title = 'Stop voice input';
+        voiceButton.disabled = false;
+        break;
+      case 'error':
+        voiceButton.title = 'Voice input error';
+        voiceButton.disabled = true;
+        break;
+    }
+  }
+  
+  /**
+   * Show voice feedback UI
+   */
+  function showVoiceFeedback() {
+    if (voiceFeedback) {
+      voiceFeedback.classList.remove('hidden');
+      voiceText.textContent = 'Listening...';
+    }
+  }
+  
+  /**
+   * Hide voice feedback UI
+   */
+  function hideVoiceFeedback() {
     if (voiceFeedback) {
       voiceFeedback.classList.add('hidden');
-    }
-    
-    // Stop voice recognition
-    state.voiceService.stopListening();
-    
-    // Stop visualizer animation
-    stopVisualizerAnimation();
-    
-    // Call onVoiceEnd callback if provided
-    if (typeof options.onVoiceEnd === 'function') {
-      options.onVoiceEnd();
     }
   }
   

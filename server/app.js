@@ -51,7 +51,7 @@ const workerThreadManager = require('./services/worker-thread-manager');
 const searchSourcesService = require('./services/search-sources-service');
 
 // Import agents and MCP
-const ToolManager = require('./mcp/tool-manager');
+const { ToolManager } = require('./mcp/tool-manager');
 const PlannerAgent = require('./agents/planner-agent');
 const ExecutorAgent = require('./agents/executor-agent');
 const SearchAgent = require('./agents/search-agent');

@@ -44,7 +44,11 @@ function initApp() {
   
   // Initialize services
   const apiService = new ApiService(config.apiBaseUrl);
-  const voiceService = new VoiceService(config.enableVoice);
+  const voiceService = new VoiceService(true, {
+    continuous: false,
+    autoSubmit: true,
+    language: 'en-US'
+  });
   
   // Initialize UI modules
   const themeManager = initThemeManager({
@@ -601,15 +605,33 @@ function setupEventListeners() {
   });
   
   // Voice button
-  document.getElementById('voiceButton')?.addEventListener('click', () => {
-    if (appState.voiceActive) {
-      // Stop voice recognition
-      const voiceService = new VoiceService(true);
-      voiceService.stopListening();
-    } else {
-      // Start voice recognition
-      const voiceService = new VoiceService(true);
-      voiceService.startListening();
+  document.getElementById('voiceButton')?.addEventListener('click', async () => {
+    try {
+      // Request microphone permission if not already granted
+      const permission = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      if (appState.voiceActive) {
+        // Stop voice recognition
+        voiceService.stopListening();
+        document.getElementById('voiceFeedback').classList.add('hidden');
+        appState.voiceActive = false;
+      } else {
+        // Start voice recognition
+        const started = voiceService.startListening(
+          handleVoiceInput,
+          handleVoiceStart,
+          handleVoiceEnd,
+          handleVoiceError
+        );
+        
+        if (started) {
+          document.getElementById('voiceFeedback').classList.remove('hidden');
+          appState.voiceActive = true;
+        }
+      }
+    } catch (error) {
+      console.error('Microphone permission error:', error);
+      handleVoiceError(new Error('Microphone access denied'));
     }
   });
   
@@ -617,9 +639,6 @@ function setupEventListeners() {
   document.getElementById('voiceCancelButton')?.addEventListener('click', () => {
     document.getElementById('voiceFeedback').classList.add('hidden');
     appState.voiceActive = false;
-    
-    // Stop voice recognition
-    const voiceService = new VoiceService(true);
     voiceService.stopListening();
   });
   

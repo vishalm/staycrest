@@ -113,6 +113,19 @@ spec:
           echo "Pulling CodeLlama model..."
           curl -X POST http://ollama:11434/api/pull -d '{"name":"codellama:7b"}'
           
+          # Pull voice-focused models
+          echo "Pulling Whisper model for ASR/STT..."
+          curl -X POST http://ollama:11434/api/pull -d '{"name":"whisper"}'
+          
+          echo "Pulling MMS model for multilingual support..."
+          curl -X POST http://ollama:11434/api/pull -d '{"name":"mms-embed"}'
+          
+          echo "Pulling XTTS model for advanced text to speech..."
+          curl -X POST http://ollama:11434/api/pull -d '{"name":"coqui-xtts"}'
+          
+          echo "Pulling Distil-Whisper model for fast STT..."
+          curl -X POST http://ollama:11434/api/pull -d '{"name":"distil-whisper"}'
+          
           echo "All models pulled successfully!"
 ---
 apiVersion: networking.k8s.io/v1

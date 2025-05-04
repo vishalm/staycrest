@@ -1,4 +1,5 @@
-FROM node:18-slim
+# Use a more comprehensive base image for development
+FROM node:18-bullseye
 
 # Set working directory
 WORKDIR /app
@@ -8,6 +9,11 @@ RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
     git \
+    ffmpeg \
+    sox \
+    python3 \
+    python3-pip \
+    chromium \
     libglib2.0-0 \
     libnss3 \
     libnspr4 \
@@ -32,24 +38,56 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install puppeteer dependencies (for web scraping)
-RUN apt-get update && apt-get install -y \
-    chromium \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Install Python dependencies for voice processing
+RUN pip3 install --no-cache-dir \
+    torch \
+    torchaudio \
+    numpy \
+    soundfile \
+    librosa
 
-# Set environment variables for Puppeteer
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Set environment variables
+ENV NODE_ENV=development \
+    DEBUG=true \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    ENABLE_VOICE_SERVICES=true \
+    DEFAULT_STT_MODEL=whisper-base \
+    DEFAULT_TTS_MODEL=tacotron2-ddc \
+    DEFAULT_VOICE=female-1 \
+    VOICE_STREAMING=true \
+    WHISPER_MODEL_SIZE=base \
+    CACHE_STRATEGY=layered \
+    DB_CACHE_METRICS=true \
+    NODE_OPTIONS=--enable-source-maps
 
-# Create logs directory
-RUN mkdir -p logs
+# Create necessary directories
+RUN mkdir -p \
+    /app/logs \
+    /app/data \
+    /app/models/voice \
+    /app/models/llm \
+    /app/cache \
+    /app/uploads \
+    && chmod -R 777 \
+        /app/logs \
+        /app/data \
+        /app/models \
+        /app/cache \
+        /app/uploads
 
-# Install nodemon for hot reloading
-RUN npm install -g nodemon
+# Install development tools
+RUN npm install -g \
+    nodemon \
+    typescript \
+    ts-node \
+    @types/node
 
-# Expose the application port and debugging port
+# Add volume mount points
+VOLUME ["/app/data", "/app/logs", "/app/models", "/app/cache", "/app/uploads"]
+
+# Expose ports
 EXPOSE 3000 9229
 
-# Run the application in development mode with nodemon for hot reloading
+# Start development server with hot reloading and debugging
 CMD ["npm", "run", "dev"] 

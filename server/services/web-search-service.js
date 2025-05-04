@@ -22,12 +22,13 @@ class WebSearchService {
     this.logger = logger;
     
     // Log API keys status (not the actual keys)
-    this.logger.debug('API keys configuration', {
-      google: !!this.apiKeys.google,
-      bing: !!this.apiKeys.bing,
-      serp: !!this.apiKeys.serp,
-      rapid: !!this.apiKeys.rapid,
-      googleCSE: !!this.customSearchEngineId
+    this.logger.info('Web Search Service initialized', {
+      providers: {
+        google: !!this.apiKeys.google && !!this.customSearchEngineId,
+        bing: !!this.apiKeys.bing,
+        serp: !!this.apiKeys.serp,
+        rapid: !!this.apiKeys.rapid
+      }
     });
   }
   
@@ -36,23 +37,28 @@ class WebSearchService {
    */
   async initialize() {
     try {
-      this.logger.info('Initializing web search service');
+      this.logger.info('Initializing Web Search Service');
       
-      // Initialize loyalty website manager
-      await this.loyaltyManager.initialize();
-      this.logger.debug('Loyalty manager initialized');
-      
-      // Test search APIs
+      // Validate search APIs
       const validationResults = await this.validateSearchAPIs();
-      this.logger.info('Search APIs validation completed', { validationResults });
+      
+      this.logger.info('Search API validation results', {
+        validationResults
+      });
+      
+      // Initialize loyalty manager
+      await this.loyaltyManager.initialize();
       
       this.isInitialized = true;
-      this.logger.info('Web search service initialized successfully');
+      this.logger.info('Web Search Service initialized successfully');
+      
       return true;
     } catch (error) {
-      this.logger.logError(error, 'Failed to initialize web search service');
-      // Continue even if initialization fails
-      return false;
+      this.logger.error('Failed to initialize Web Search Service', {
+        error: error.message,
+        stack: error.stack
+      });
+      throw error;
     }
   }
   
@@ -354,38 +360,130 @@ class WebSearchService {
    * @param {Object} options - Search options
    * @returns {Promise<Object>} Hotel search results
    */
-  async searchHotels(query, options) {
+  async searchHotels(query, options = {}) {
+    const startTime = Date.now();
+    const searchId = `web-search-${Date.now()}`;
+
     try {
+      this.logger.info('Starting hotel search', {
+        searchId,
+        query,
+        options: JSON.stringify(options)
+      });
+
+      if (!this.isInitialized) {
+        this.logger.warn('Service not initialized, attempting to initialize', {
+          searchId
+        });
+        await this.initialize();
+      }
+
+      // Get enabled sources
       const sources = this.loyaltyManager.getEnabledSources();
       
       if (sources.length === 0) {
-        throw new Error('No hotel loyalty programs configured');
+        const error = new Error('No hotel search sources configured');
+        this.logger.error('No search sources available', { searchId });
+        throw error;
       }
-      
+
+      this.logger.debug('Enabled search sources', {
+        searchId,
+        sourceCount: sources.length,
+        sources: sources.map(s => s.name)
+      });
+
       // Convert natural language query to search parameters
       const searchParams = this.parseHotelQuery(query);
       
-      // Combine with explicit options
-      const combinedParams = {
-        ...searchParams,
-        ...options.params
-      };
+      this.logger.debug('Parsed search parameters', {
+        searchId,
+        params: JSON.stringify(searchParams)
+      });
+
+      // Search all sources in parallel
+      const searchPromises = sources.map(source => 
+        this.loyaltyManager.extractHotels(source.id, searchParams)
+          .then(result => {
+            this.logger.debug(`Search completed for source: ${source.name}`, {
+              searchId,
+              source: source.name,
+              resultCount: result.data?.length || 0
+            });
+            return { data: result.data || [], source: source.name };
+          })
+          .catch(error => {
+            this.logger.error(`Error searching source: ${source.name}`, {
+              searchId,
+              source: source.name,
+              error: error.message,
+              stack: error.stack
+            });
+            return { data: [], source: source.name };
+          })
+      );
+
+      // Wait for all searches to complete
+      const results = await Promise.all(searchPromises);
+
+      // Combine results
+      const allHotels = [];
+      const seenHotels = new Set();
+
+      for (const result of results) {
+        if (result.data && Array.isArray(result.data)) {
+          for (const hotel of result.data) {
+            // Generate unique key for hotel
+            const hotelKey = `${hotel.name}|${hotel.location}`.toLowerCase();
+            
+            if (!seenHotels.has(hotelKey)) {
+              seenHotels.add(hotelKey);
+              allHotels.push({
+                ...hotel,
+                source: result.source
+              });
+            }
+          }
+        }
+      }
+
+      const duration = Date.now() - startTime;
       
-      // For now, just search with first source
-      // In production, would search multiple sources in parallel
-      const source = sources[0];
-      const results = await this.loyaltyManager.extractHotels(source.id, combinedParams);
-      
+      this.logger.info('Search completed successfully', {
+        searchId,
+        duration,
+        totalResults: allHotels.length,
+        sourceBreakdown: results.reduce((acc, result) => {
+          acc[result.source] = result.data.length;
+          return acc;
+        }, {})
+      });
+
       return {
         source: 'hotels',
-        provider: source.name,
-        results: results.data,
+        providers: sources.map(s => s.name),
+        results: allHotels,
         timestamp: new Date(),
         query: query,
-        parameters: combinedParams
+        parameters: searchParams,
+        timing: {
+          duration,
+          timestamp: new Date()
+        }
       };
+
     } catch (error) {
-      this.logger.error(`Hotel search error: ${error.message}`);
+      const duration = Date.now() - startTime;
+      
+      this.logger.error('Search failed', {
+        searchId,
+        duration,
+        error: error.message,
+        stack: error.stack,
+        query,
+        options: JSON.stringify(options)
+      });
+
       throw error;
     }
   }
