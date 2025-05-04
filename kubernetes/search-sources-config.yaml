@@ -1,0 +1,271 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: search-sources-config
+data:
+  search-sources.js: |
+    /**
+     * StayCrest Search Sources Configuration
+     * Kubernetes ConfigMap version
+     */
+    
+    const SearchSources = {
+      loyaltyPrograms: {
+        marriottBonvoy: {
+          id: 'marriott-bonvoy',
+          name: 'Marriott Bonvoy',
+          url: 'https://www.marriott.com/loyalty',
+          apiEndpoint: 'https://api.marriott.com/search/v1',
+          logo: '/assets/images/logos/marriott-bonvoy.png',
+          enabled: true,
+          partnerBrands: ['Westin', 'Sheraton', 'The Ritz-Carlton', 'St. Regis', 'W Hotels'],
+          type: 'Hotel Chain Loyalty',
+          theme: {
+            primaryColor: '#b73225',
+            secondaryColor: '#aa292b',
+            accentColor: '#c29961',
+            backgroundColor: '#ffffff',
+            textColor: '#1a1a1a',
+            fontFamily: "'Helvetica Neue', sans-serif",
+            brandingStyle: 'modern-corporate'
+          }
+        },
+        hiltonHonors: {
+          id: 'hilton-honors',
+          name: 'Hilton Honors',
+          url: 'https://www.hilton.com/en/hilton-honors',
+          apiEndpoint: 'https://api.hilton.com/hhonors/v1/search',
+          logo: '/assets/images/logos/hilton-honors.png',
+          enabled: true,
+          partnerBrands: ['Conrad', 'Waldorf Astoria', 'DoubleTree', 'Hampton', 'Embassy Suites'],
+          type: 'Hotel Chain Loyalty',
+          theme: {
+            primaryColor: '#0000a0',
+            secondaryColor: '#003087',
+            accentColor: '#c41230',
+            backgroundColor: '#f5f5f5',
+            textColor: '#333333',
+            fontFamily: "'Open Sans', sans-serif",
+            brandingStyle: 'corporate-blue'
+          }
+        },
+        ihgOneRewards: {
+          id: 'ihg-rewards',
+          name: 'IHG One Rewards',
+          url: 'https://www.ihg.com/onerewards',
+          apiEndpoint: 'https://apis.ihg.com/hotels/v1/search',
+          logo: '/assets/images/logos/ihg-rewards.png',
+          enabled: true,
+          partnerBrands: ['InterContinental', 'Holiday Inn', 'Kimpton', 'Six Senses', 'Crowne Plaza'],
+          type: 'Hotel Chain Loyalty',
+          theme: {
+            primaryColor: '#00205b',
+            secondaryColor: '#1e3b70',
+            accentColor: '#0098a6',
+            backgroundColor: '#f1f4f6',
+            textColor: '#333333',
+            fontFamily: "'Arial', sans-serif",
+            brandingStyle: 'professional-trusted'
+          }
+        },
+        worldOfHyatt: {
+          id: 'world-of-hyatt',
+          name: 'World of Hyatt',
+          url: 'https://world.hyatt.com',
+          apiEndpoint: 'https://api.hyatt.com/search',
+          logo: '/assets/images/logos/world-of-hyatt.png',
+          enabled: true,
+          partnerBrands: ['Park Hyatt', 'Grand Hyatt', 'Andaz', 'Thompson Hotels', 'Hyatt Regency'],
+          type: 'Hotel Chain Loyalty',
+          theme: {
+            primaryColor: '#000000',
+            secondaryColor: '#c19b67',
+            accentColor: '#e5c470',
+            backgroundColor: '#ffffff',
+            textColor: '#1a1a1a',
+            fontFamily: "'Helvetica', sans-serif",
+            brandingStyle: 'premium-minimal'
+          }
+        },
+        accorLiveLimitless: {
+          id: 'accor-all',
+          name: 'ALL - Accor Live Limitless',
+          url: 'https://all.accor.com',
+          apiEndpoint: 'https://api.accor.com/hotels/v1/search',
+          logo: '/assets/images/logos/accor-all.png',
+          enabled: true,
+          partnerBrands: ['Sofitel', 'Novotel', 'Pullman', 'Mercure', 'ibis']
+        },
+        choicePrivileges: {
+          id: 'choice-privileges',
+          name: 'Choice Privileges',
+          url: 'https://www.choicehotels.com/choice-privileges',
+          apiEndpoint: 'https://api.choicehotels.com/search/v1',
+          logo: '/assets/images/logos/choice-privileges.png',
+          enabled: true,
+          partnerBrands: ['Comfort', 'Quality Inn', 'Clarion', 'Cambria', 'Ascend Collection']
+        },
+        wyndhamRewards: {
+          id: 'wyndham-rewards',
+          name: 'Wyndham Rewards',
+          url: 'https://www.wyndhamhotels.com/wyndham-rewards',
+          apiEndpoint: 'https://api.wyndhamhotels.com/search/v1',
+          logo: '/assets/images/logos/wyndham-rewards.png',
+          enabled: true,
+          partnerBrands: ['Wyndham', 'Ramada', 'Days Inn', 'Super 8', 'La Quinta']
+        },
+        bestWesternRewards: {
+          id: 'bw-rewards',
+          name: 'Best Western Rewards',
+          url: 'https://www.bestwestern.com/en_US/best-western-rewards.html',
+          apiEndpoint: 'https://api.bestwestern.com/search/v1',
+          logo: '/assets/images/logos/bw-rewards.png',
+          enabled: true,
+          partnerBrands: ['Best Western', 'BW Premier', 'BW Plus', 'Executive Residency', 'Sadie']
+        },
+        radissonRewards: {
+          id: 'radisson-rewards',
+          name: 'Radisson Rewards',
+          url: 'https://www.radissonhotels.com/en-us/rewards',
+          apiEndpoint: 'https://api.radissonhotels.com/search/v1',
+          logo: '/assets/images/logos/radisson-rewards.png',
+          enabled: true,
+          partnerBrands: ['Radisson Blu', 'Radisson RED', 'Park Plaza', 'Park Inn', 'Country Inn']
+        },
+        ghaDiscovery: {
+          id: 'gha-discovery',
+          name: 'GHA Discovery',
+          url: 'https://www.ghadiscovery.com',
+          apiEndpoint: null,
+          logo: '/assets/images/logos/gha-discovery.png',
+          enabled: true,
+          partnerBrands: ['Anantara', 'Kempinski', 'Pan Pacific', 'COMO Hotels', 'Viceroy'],
+          type: 'Hotel Alliance Loyalty',
+          theme: {
+            primaryColor: '#1a1a1a',
+            secondaryColor: '#c9a96e',
+            accentColor: '#f5deb3',
+            backgroundColor: '#f8f9fa',
+            textColor: '#333333',
+            fontFamily: "'Playfair Display', serif",
+            brandingStyle: 'luxury'
+          }
+        },
+        minorDiscovery: {
+          id: 'minor-discovery',
+          name: 'Minor DISCOVERY',
+          url: 'https://www.minorhotels.com/en/loyalty',
+          apiEndpoint: null,
+          logo: '/assets/images/logos/minor-discovery.png',
+          enabled: true,
+          partnerBrands: ['Anantara', 'Avani', 'Elewana', 'Oaks', 'NH Hotels']
+        },
+        leadingHotels: {
+          id: 'leading-hotels',
+          name: 'The Leading Hotels of the World',
+          url: 'https://www.lhw.com',
+          apiEndpoint: 'https://api.lhw.com/search/v1',
+          logo: '/assets/images/logos/lhw.png',
+          enabled: true,
+          partnerBrands: ['The Leading Hotels of the World']
+        },
+        smallLuxuryHotels: {
+          id: 'slh',
+          name: 'Small Luxury Hotels',
+          url: 'https://www.slh.com',
+          apiEndpoint: 'https://api.slh.com/search/v1',
+          logo: '/assets/images/logos/slh.png',
+          enabled: true,
+          partnerBrands: ['Small Luxury Hotels']
+        },
+        preferredHotels: {
+          id: 'preferred-hotels',
+          name: 'Preferred Hotels & Resorts',
+          url: 'https://preferredhotels.com',
+          apiEndpoint: 'https://api.preferredhotels.com/search/v1',
+          logo: '/assets/images/logos/preferred-hotels.png',
+          enabled: true,
+          partnerBrands: ['Preferred Hotels & Resorts']
+        }
+      },
+      
+      webSearch: {
+        defaultProvider: 'google',
+        providers: {
+          google: {
+            name: 'Google Hotels',
+            baseUrl: 'https://www.google.com/travel/hotels',
+            apiEndpoint: '/api/search/google',
+            enabled: true
+          },
+          bing: {
+            name: 'Bing Travel',
+            baseUrl: 'https://www.bing.com/travel/hotels',
+            apiEndpoint: '/api/search/bing',
+            enabled: false
+          }
+        }
+      },
+      
+      hotelAggregators: {
+        trivago: {
+          name: 'Trivago',
+          baseUrl: 'https://www.trivago.com',
+          apiEndpoint: '/api/aggregators/trivago',
+          enabled: true
+        },
+        kayak: {
+          name: 'Kayak',
+          baseUrl: 'https://www.kayak.com/hotels',
+          apiEndpoint: '/api/aggregators/kayak',
+          enabled: true
+        },
+        expedia: {
+          name: 'Expedia',
+          baseUrl: 'https://www.expedia.com/Hotels',
+          apiEndpoint: '/api/aggregators/expedia',
+          enabled: true
+        },
+        booking: {
+          name: 'Booking.com',
+          baseUrl: 'https://www.booking.com',
+          apiEndpoint: '/api/aggregators/booking',
+          enabled: true
+        },
+        hotels: {
+          name: 'Hotels.com',
+          baseUrl: 'https://www.hotels.com',
+          apiEndpoint: '/api/aggregators/hotels',
+          enabled: true
+        }
+      },
+      
+      directBooking: {
+        marriott: {
+          name: 'Marriott.com',
+          baseUrl: 'https://www.marriott.com',
+          apiEndpoint: '/api/direct/marriott',
+          enabled: true
+        },
+        hilton: {
+          name: 'Hilton.com',
+          baseUrl: 'https://www.hilton.com',
+          apiEndpoint: '/api/direct/hilton',
+          enabled: true
+        },
+        ihg: {
+          name: 'IHG.com',
+          baseUrl: 'https://www.ihg.com',
+          apiEndpoint: '/api/direct/ihg',
+          enabled: true
+        },
+        hyatt: {
+          name: 'Hyatt.com',
+          baseUrl: 'https://www.hyatt.com',
+          apiEndpoint: '/api/direct/hyatt',
+          enabled: true
+        }
+      }
+    };
+    
+    module.exports = SearchSources; 

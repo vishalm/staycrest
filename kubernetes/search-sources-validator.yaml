@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: search-sources-validator
+  labels:
+    app: staycrest
+    component: validator
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: staycrest
+        component: validator
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: validator
+        image: staycrest:latest
+        command: ["node", "-e", "
+          const SearchSources = require('/app/config/search-sources.js');
+          console.log('Validating search sources configuration...');
+          
+          // Check loyalty programs
+          if (!SearchSources.loyaltyPrograms || Object.keys(SearchSources.loyaltyPrograms).length === 0) {
+            console.error('Error: No loyalty programs found in configuration');
+            process.exit(1);
+          }
+          
+          // Check web search providers
+          if (!SearchSources.webSearch || !SearchSources.webSearch.providers || 
+              Object.keys(SearchSources.webSearch.providers).length === 0) {
+            console.error('Error: No web search providers found in configuration');
+            process.exit(1);
+          }
+          
+          // Check hotel aggregators
+          if (!SearchSources.hotelAggregators || Object.keys(SearchSources.hotelAggregators).length === 0) {
+            console.error('Error: No hotel aggregators found in configuration');
+            process.exit(1);
+          }
+          
+          // Check direct booking options
+          if (!SearchSources.directBooking || Object.keys(SearchSources.directBooking).length === 0) {
+            console.error('Error: No direct booking options found in configuration');
+            process.exit(1);
+          }
+          
+          console.log('Configuration validation successful!');
+          console.log(`Found ${Object.keys(SearchSources.loyaltyPrograms).length} loyalty programs`);
+          console.log(`Found ${Object.keys(SearchSources.webSearch.providers).length} web search providers`);
+          console.log(`Found ${Object.keys(SearchSources.hotelAggregators).length} hotel aggregators`);
+          console.log(`Found ${Object.keys(SearchSources.directBooking).length} direct booking options`);
+          process.exit(0);
+        "]
+        volumeMounts:
+        - name: search-sources-config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: search-sources-config
+        configMap:
+          name: search-sources-config 

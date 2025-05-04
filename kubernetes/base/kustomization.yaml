@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../storage-class.yaml
+- ../search-sources-config.yaml
+- ../search-sources-validator.yaml
+- ../db-cache-config.yaml
+- ../persistent-volumes.yaml
+- ../ollama.yaml
+- ../elasticsearch.yaml
+- ../grafana.yaml
+- ../prometheus.yaml
+- ../mongodb.yaml
+- ../redis.yaml
+- ../postgres.yaml
+- ../deployment.yaml
+- ../observability.yaml
+
+commonLabels:
+  app: staycrest
+  part-of: staycrest-platform
+
+# Default namespace can be overridden by overlay files
+namespace: staycrest 

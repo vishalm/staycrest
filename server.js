@@ -17,6 +17,7 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.txt': 'text/plain',
+  '.yaml': 'application/x-yaml',
 };
 
 // Simple in-memory database for demo purposes
@@ -60,6 +61,278 @@ const mockDB = {
   ]
 };
 
+// Track service start time for uptime calculation
+const startTime = Date.now();
+
+// Simple Swagger specification
+const swaggerSpec = {
+  openapi: '3.0.0',
+  info: {
+    title: 'StayCrest API',
+    version: '1.0.0',
+    description: 'API documentation for the StayCrest hotel discovery platform',
+    contact: {
+      name: 'StayCrest Support',
+      url: 'https://staycrest.example.com/support',
+      email: 'support@staycrest.example.com'
+    }
+  },
+  servers: [
+    {
+      url: '/api',
+      description: 'Development server'
+    }
+  ],
+  paths: {
+    '/search': {
+      get: {
+        summary: 'Search for hotels',
+        description: 'Find hotels based on search criteria',
+        parameters: [
+          {
+            name: 'q',
+            in: 'query',
+            description: 'Search query',
+            schema: { type: 'string' }
+          },
+          {
+            name: 'location',
+            in: 'query',
+            description: 'Filter by location',
+            schema: { type: 'string' }
+          }
+        ],
+        responses: {
+          '200': {
+            description: 'Successful response',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string', example: 'success' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        query: { type: 'string' },
+                        hotels: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string' },
+                              name: { type: 'string' },
+                              chain: { type: 'string' },
+                              location: { type: 'string' },
+                              stars: { type: 'number' },
+                              price: { type: 'number' },
+                              currency: { type: 'string' },
+                              image: { type: 'string' }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/chat': {
+      post: {
+        summary: 'Send chat message',
+        description: 'Send a message to the AI assistant and receive a response',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['message'],
+                properties: {
+                  message: { type: 'string' },
+                  sessionId: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          '200': {
+            description: 'Successful response',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string', example: 'success' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        response: { type: 'string' },
+                        sessionId: { type: 'string' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/loyalty/programs': {
+      get: {
+        summary: 'Get loyalty programs',
+        description: 'Retrieve information about hotel loyalty programs',
+        responses: {
+          '200': {
+            description: 'Successful response',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string', example: 'success' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        programs: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string' },
+                              name: { type: 'string' },
+                              pointsValue: { type: 'number' },
+                              hotels: {
+                                type: 'array',
+                                items: { type: 'string' }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/features': {
+      get: {
+        summary: 'Get feature flags',
+        description: 'Get configuration for enabled features',
+        responses: {
+          '200': {
+            description: 'Successful response',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string', example: 'success' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        features: {
+                          type: 'object',
+                          properties: {
+                            voiceCommands: { type: 'boolean' },
+                            darkMode: { type: 'boolean' },
+                            locationServices: { type: 'boolean' },
+                            pointsCalculator: { type: 'boolean' }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/health': {
+      get: {
+        summary: 'Health check',
+        description: 'Check if the API is running',
+        responses: {
+          '200': {
+            description: 'API is running',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string', example: 'ok' },
+                    uptime: { type: 'number' },
+                    timestamp: { type: 'string', format: 'date-time' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/health/liveness': {
+      get: {
+        summary: 'Liveness probe',
+        description: 'Kubernetes liveness probe endpoint',
+        responses: {
+          '200': {
+            description: 'Service is alive',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string', example: 'ok' },
+                    uptime: { type: 'number' },
+                    timestamp: { type: 'string', format: 'date-time' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    '/health/readiness': {
+      get: {
+        summary: 'Readiness probe',
+        description: 'Kubernetes readiness probe endpoint',
+        responses: {
+          '200': {
+            description: 'Service is ready',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string', example: 'ok' },
+                    uptime: { type: 'number' },
+                    ready: { type: 'boolean' },
+                    timestamp: { type: 'string', format: 'date-time' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
 // Create HTTP Server
 const server = http.createServer((req, res) => {
   console.log(`${req.method} ${req.url}`);
@@ -100,10 +373,25 @@ function handleApiRequest(req, res, pathname, parsedUrl) {
     return;
   }
   
+  // Remove /api prefix for easier routing
+  const apiPath = pathname.replace(/^\/api/, '');
+  
   // API Endpoints
-  switch(pathname) {
+  switch(apiPath) {
+    // Swagger API Documentation
+    case '/docs':
+    case '/docs/':
+      serveSwaggerUI(res);
+      break;
+    
+    // Swagger JSON spec
+    case '/docs.json':
+      res.statusCode = 200;
+      res.end(JSON.stringify(swaggerSpec));
+      break;
+      
     // Get hotels by search criteria
-    case '/api/search':
+    case '/search':
       if (req.method === 'GET') {
         // Read query parameters
         const query = parsedUrl.query.q || '';
@@ -143,7 +431,7 @@ function handleApiRequest(req, res, pathname, parsedUrl) {
       break;
     
     // Chat API (simple echo for now)
-    case '/api/chat':
+    case '/chat':
       if (req.method === 'POST') {
         let body = '';
         req.on('data', chunk => {
@@ -191,7 +479,7 @@ function handleApiRequest(req, res, pathname, parsedUrl) {
       break;
     
     // Get loyalty programs
-    case '/api/loyalty/programs':
+    case '/loyalty/programs':
       if (req.method === 'GET') {
         res.statusCode = 200;
         res.end(JSON.stringify({
@@ -207,7 +495,7 @@ function handleApiRequest(req, res, pathname, parsedUrl) {
       break;
     
     // Feature flags API - useful for enabling/disabling features
-    case '/api/features':
+    case '/features':
       res.statusCode = 200;
       res.end(JSON.stringify({
         status: 'success',
@@ -221,12 +509,115 @@ function handleApiRequest(req, res, pathname, parsedUrl) {
         }
       }));
       break;
+
+    // Health checks
+    case '/health':
+      res.statusCode = 200;
+      res.end(JSON.stringify({
+        status: 'ok',
+        uptime: Math.floor((Date.now() - startTime) / 1000),
+        timestamp: new Date().toISOString()
+      }));
+      break;
+      
+    case '/health/liveness':
+      res.statusCode = 200;
+      res.end(JSON.stringify({
+        status: 'ok',
+        uptime: Math.floor((Date.now() - startTime) / 1000),
+        timestamp: new Date().toISOString()
+      }));
+      break;
+      
+    case '/health/readiness':
+      res.statusCode = 200;
+      res.end(JSON.stringify({
+        status: 'ok',
+        ready: true,
+        uptime: Math.floor((Date.now() - startTime) / 1000),
+        timestamp: new Date().toISOString(),
+        services: {
+          mockDB: mockDB ? true : false
+        }
+      }));
+      break;
+      
+    // Root API - show available endpoints
+    case '':
+    case '/':
+      res.statusCode = 200;
+      res.end(JSON.stringify({
+        name: 'StayCrest API',
+        version: '1.0.0',
+        description: 'StayCrest hotel discovery platform API',
+        documentation: '/api/docs',
+        endpoints: [
+          { path: '/api/search', method: 'GET', description: 'Search for hotels' },
+          { path: '/api/chat', method: 'POST', description: 'Send a message to the AI assistant' },
+          { path: '/api/loyalty/programs', method: 'GET', description: 'Get loyalty program information' },
+          { path: '/api/features', method: 'GET', description: 'Get feature flags' },
+          { path: '/api/health', method: 'GET', description: 'Health check' },
+          { path: '/api/health/liveness', method: 'GET', description: 'Kubernetes liveness probe' },
+          { path: '/api/health/readiness', method: 'GET', description: 'Kubernetes readiness probe' }
+        ]
+      }));
+      break;
     
     // Default 404 for unknown API endpoints
     default:
       res.statusCode = 404;
       res.end(JSON.stringify({ status: 'error', message: 'API endpoint not found' }));
   }
+}
+
+/**
+ * Serve Swagger UI
+ */
+function serveSwaggerUI(res) {
+  // Serve a simple HTML file that loads Swagger UI from CDN
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <meta name="description" content="StayCrest API Documentation" />
+      <title>StayCrest API Documentation</title>
+      <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui.css" />
+      <style>
+        body {
+          margin: 0;
+          background: #fafafa;
+        }
+        .topbar {
+          display: none;
+        }
+      </style>
+    </head>
+    <body>
+      <div id="swagger-ui"></div>
+      <script src="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui-bundle.js" crossorigin></script>
+      <script>
+        window.onload = () => {
+          window.ui = SwaggerUIBundle({
+            url: '/api/docs.json',
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [
+              SwaggerUIBundle.presets.apis,
+              SwaggerUIBundle.SwaggerUIStandalonePreset
+            ],
+            layout: "BaseLayout",
+            persistAuthorization: true,
+          });
+        };
+      </script>
+    </body>
+    </html>
+  `;
+  res.statusCode = 200;
+  res.end(html);
 }
 
 /**
@@ -300,4 +691,6 @@ function serveStaticFile(res, pathname) {
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}/`);
   console.log(`API available at http://localhost:${PORT}/api/`);
+  console.log(`API documentation available at http://localhost:${PORT}/api/docs`);
+  console.log(`Health check available at http://localhost:${PORT}/api/health`);
 }); 

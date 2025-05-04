@@ -19,7 +19,7 @@ class WebSearchService {
     this.maxCacheAge = 3600000; // 1 hour
     this.searchCache = new Map();
     this.isInitialized = false;
-    this.logger = logger.createChildLogger('web-search', { service: 'web-search' });
+    this.logger = logger;
     
     // Log API keys status (not the actual keys)
     this.logger.debug('API keys configuration', {
@@ -325,7 +325,7 @@ class WebSearchService {
         timestamp: new Date()
       };
     } catch (error) {
-      logger.error(`Bing search error: ${error.message}`);
+      this.logger.error(`Bing search error: ${error.message}`);
       throw error;
     }
   }
@@ -385,7 +385,7 @@ class WebSearchService {
         parameters: combinedParams
       };
     } catch (error) {
-      logger.error(`Hotel search error: ${error.message}`);
+      this.logger.error(`Hotel search error: ${error.message}`);
       throw error;
     }
   }
@@ -397,22 +397,128 @@ class WebSearchService {
    */
   parseHotelQuery(query) {
     // In a real implementation, would use NLP or LLM to extract entities
-    // For now, use basic parsing
+    // For now, use improved basic parsing
     const params = {};
     
-    // Extract location
-    const locationMatch = query.match(/in\s+([a-zA-Z\s]+)/) || 
-                       query.match(/at\s+([a-zA-Z\s]+)/);
-    if (locationMatch) {
-      params.location = locationMatch[1].trim();
+    // Convert query to lowercase for case-insensitive matching
+    const normalizedQuery = query.toLowerCase();
+    
+    // Extract location - improved regex pattern for more location formats
+    // Match patterns like: "in New York", "at Miami Beach", "near Central Park"
+    // Also handles multi-word locations with spaces
+    const locationPatterns = [
+      /\b(?:in|at|near|around|by)\s+([a-zA-Z\s.',-]+?)(?:\s+from|\s+to|\s+between|\s+with|\s+for|\s+\d|\s*$)/i,
+      /\blocation\s*(?::|is|in|at|near)\s+([a-zA-Z\s.',-]+?)(?:\s+from|\s+to|\s+between|\s+with|\s+for|\s+\d|\s*$)/i,
+    ];
+    
+    for (const pattern of locationPatterns) {
+      const match = normalizedQuery.match(pattern);
+      if (match && match[1]) {
+        params.location = match[1].trim();
+        break;
+      }
     }
     
-    // Extract dates
-    const dateMatch = query.match(/from\s+(\w+\s+\d+)\s+to\s+(\w+\s+\d+)/);
-    if (dateMatch) {
-      params.checkIn = dateMatch[1];
-      params.checkOut = dateMatch[2];
+    // If no location found using the patterns above, try extracting known city names
+    if (!params.location) {
+      const commonCities = [
+        'new york', 'los angeles', 'chicago', 'houston', 'phoenix', 'philadelphia', 
+        'san antonio', 'san diego', 'dallas', 'san jose', 'austin', 'jacksonville', 
+        'san francisco', 'columbus', 'indianapolis', 'fort worth', 'charlotte', 
+        'seattle', 'denver', 'washington', 'boston', 'el paso', 'nashville', 
+        'las vegas', 'detroit', 'miami', 'london', 'paris', 'tokyo', 'sydney'
+      ];
+      
+      for (const city of commonCities) {
+        if (normalizedQuery.includes(city)) {
+          params.location = city;
+          break;
+        }
+      }
     }
+    
+    // Extract dates - improved pattern matching
+    // Match formats like: "from May 10 to May 15", "between June 2 and June 10"
+    const datePatterns = [
+      /(?:from|between|starting)\s+(\w+\s+\d{1,2}(?:st|nd|rd|th)?)\s+(?:to|and|until|through|ending|end date|-)?\s+(\w+\s+\d{1,2}(?:st|nd|rd|th)?)/i,
+      /(?:arriving|arrival|checkin|check-in|check in)\s+(?:on|date|at)?\s+(\w+\s+\d{1,2}(?:st|nd|rd|th)?)/i,
+      /(?:departing|departure|checkout|check-out|check out)\s+(?:on|date|at)?\s+(\w+\s+\d{1,2}(?:st|nd|rd|th)?)/i
+    ];
+    
+    // Try to match full date range first
+    const dateRangeMatch = normalizedQuery.match(datePatterns[0]);
+    if (dateRangeMatch) {
+      params.checkIn = dateRangeMatch[1];
+      params.checkOut = dateRangeMatch[2];
+    } else {
+      // Try to match individual check-in or check-out dates
+      const checkInMatch = normalizedQuery.match(datePatterns[1]);
+      const checkOutMatch = normalizedQuery.match(datePatterns[2]);
+      
+      if (checkInMatch) {
+        params.checkIn = checkInMatch[1];
+      }
+      
+      if (checkOutMatch) {
+        params.checkOut = checkOutMatch[1];
+      }
+    }
+    
+    // Extract guest count and room count
+    const guestMatch = normalizedQuery.match(/(\d+)\s+(?:guest|guests|people|person|adult|adults)/i);
+    if (guestMatch) {
+      params.guests = parseInt(guestMatch[1], 10);
+    }
+    
+    const roomMatch = normalizedQuery.match(/(\d+)\s+(?:room|rooms)/i);
+    if (roomMatch) {
+      params.rooms = parseInt(roomMatch[1], 10);
+    }
+    
+    // Extract hotel star rating
+    const starMatch = normalizedQuery.match(/(\d+)[\s-]*star/i);
+    if (starMatch) {
+      params.stars = parseInt(starMatch[1], 10);
+    }
+    
+    // Extract price range
+    const pricePatterns = [
+      /(?:under|less than|below|max|maximum)\s+\$?(\d+)/i,
+      /(?:above|over|more than|min|minimum)\s+\$?(\d+)/i,
+      /(?:between)\s+\$?(\d+)\s+and\s+\$?(\d+)/i,
+      /(?:budget|cheap|affordable)/i,
+      /(?:luxury|upscale|high-end|expensive)/i
+    ];
+    
+    const underMatch = normalizedQuery.match(pricePatterns[0]);
+    const overMatch = normalizedQuery.match(pricePatterns[1]);
+    const betweenMatch = normalizedQuery.match(pricePatterns[2]);
+    const budgetMatch = normalizedQuery.match(pricePatterns[3]);
+    const luxuryMatch = normalizedQuery.match(pricePatterns[4]);
+    
+    if (betweenMatch) {
+      params.priceMin = parseInt(betweenMatch[1], 10);
+      params.priceMax = parseInt(betweenMatch[2], 10);
+    } else {
+      if (overMatch) {
+        params.priceMin = parseInt(overMatch[1], 10);
+      }
+      
+      if (underMatch) {
+        params.priceMax = parseInt(underMatch[1], 10);
+      }
+      
+      if (budgetMatch) {
+        params.priceMax = 150; // Default budget price
+      }
+      
+      if (luxuryMatch) {
+        params.priceMin = 300; // Default luxury minimum
+      }
+    }
+    
+    // Add the original query to help with context
+    params.query = query;
     
     return params;
   }
@@ -432,7 +538,7 @@ class WebSearchService {
    */
   clearCache() {
     this.searchCache.clear();
-    logger.info('Search cache cleared');
+    this.logger.info('Search cache cleared');
   }
   
   /**

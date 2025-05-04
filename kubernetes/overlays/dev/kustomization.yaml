@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+
+namespace: staycrest-dev
+
+commonLabels:
+  environment: development
+  variant: dev
+
+patches:
+- path: replicas-patch.yaml
+- path: resources-patch.yaml
+- path: config-patch.yaml
+
+configMapGenerator:
+- name: staycrest-config
+  behavior: merge
+  literals:
+    - NODE_ENV=development
+    - LOG_LEVEL=debug
+    - WORKER_THREADS=2
+    - ENABLE_METRICS=true
+    - API_RATE_LIMIT=500
+    - CACHE_TTL=300
+    # Search Sources Configuration
+    - ENABLE_LOYALTY_PROGRAMS=true
+    - ENABLE_WEB_SEARCH=true
+    - ENABLE_HOTEL_AGGREGATORS=true
+    - ENABLE_DIRECT_BOOKING=true
+    # Database Cache Configuration
+    - ENABLE_REDIS_CACHE=true
+    - ENABLE_MONGODB_CACHE=true
+    - ENABLE_POSTGRES_PGBOUNCER=true
+    - ENABLE_POSTGRES_QUERY_CACHE=true
+    - CACHE_STRATEGY=layered
+    - DB_CACHE_METRICS=true
+    - REDIS_MAX_MEMORY=512mb
+    - MONGODB_QUERY_CACHE_SIZE=128mb
+    - PGBOUNCER_MAX_CONNECTIONS=50 

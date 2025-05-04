@@ -1,0 +1,136 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  labels:
+    app: staycrest
+    component: ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: staycrest
+      component: ollama
+  strategy:
+    type: Recreate  # Ensure we don't have multiple instances trying to use the same PV
+  template:
+    metadata:
+      labels:
+        app: staycrest
+        component: ollama
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 11434
+          name: http
+        resources:
+          limits:
+            cpu: "4"
+            memory: "16Gi"
+            nvidia.com/gpu: "1"  # If GPU is available
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+        env:
+        - name: OLLAMA_HOST
+          value: "0.0.0.0"
+        - name: OLLAMA_MODELS_PATH
+          value: "/models"
+        volumeMounts:
+        - name: ollama-models
+          mountPath: /models
+        readinessProbe:
+          httpGet:
+            path: /api/tags
+            port: 11434
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/tags
+            port: 11434
+          initialDelaySeconds: 60
+          periodSeconds: 15
+      volumes:
+      - name: ollama-models
+        persistentVolumeClaim:
+          claimName: ollama-models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  labels:
+    app: staycrest
+    component: ollama
+spec:
+  selector:
+    app: staycrest
+    component: ollama
+  ports:
+  - port: 11434
+    targetPort: 11434
+    name: http
+  type: ClusterIP
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ollama-model-puller
+  labels:
+    app: staycrest
+    component: ollama-init
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: staycrest
+        component: ollama-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: model-puller
+        image: curlimages/curl:latest
+        command:
+        - "/bin/sh"
+        - "-c"
+        - |
+          # Wait for Ollama service to be ready
+          echo "Waiting for Ollama service to be ready..."
+          sleep 60
+          
+          # Pull required models for StayCrest
+          echo "Pulling Llama2 model..."
+          curl -X POST http://ollama:11434/api/pull -d '{"name":"llama2"}'
+          
+          echo "Pulling Mistral model..."
+          curl -X POST http://ollama:11434/api/pull -d '{"name":"mistral"}'
+          
+          echo "Pulling CodeLlama model..."
+          curl -X POST http://ollama:11434/api/pull -d '{"name":"codellama:7b"}'
+          
+          echo "All models pulled successfully!"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ollama-network-policy
+  labels:
+    app: staycrest
+spec:
+  podSelector:
+    matchLabels:
+      app: staycrest
+      component: ollama
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: staycrest
+    ports:
+    - protocol: TCP
+      port: 11434 

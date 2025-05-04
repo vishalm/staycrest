@@ -392,7 +392,7 @@ function sendChatMessage(message) {
   })
   .then(response => {
     if (!response.ok) {
-      throw new Error('Network response was not ok');
+      throw new Error(`Network error: ${response.status} ${response.statusText}`);
     }
     return response.json();
   })
@@ -407,17 +407,34 @@ function sendChatMessage(message) {
         timestamp: new Date(),
       });
       
-      // Check if the message contains hotel keywords to trigger a search results panel
+      // Check message keywords to trigger appropriate actions
+      const lowerCaseMessage = message.toLowerCase();
+      
+      // Hotel search keywords
       if (
-        message.toLowerCase().includes('hotel') || 
-        message.toLowerCase().includes('stay') ||
-        message.toLowerCase().includes('book')
+        lowerCaseMessage.includes('hotel') || 
+        lowerCaseMessage.includes('stay') ||
+        lowerCaseMessage.includes('book') ||
+        lowerCaseMessage.includes('room') ||
+        lowerCaseMessage.includes('accommodation')
       ) {
-        // Fetch hotel search results as a demo
+        // Fetch hotel search results
         searchHotels(message);
       }
+      
+      // Loyalty program keywords
+      else if (
+        lowerCaseMessage.includes('loyalty') ||
+        lowerCaseMessage.includes('points') ||
+        lowerCaseMessage.includes('program') ||
+        lowerCaseMessage.includes('rewards') ||
+        lowerCaseMessage.includes('membership')
+      ) {
+        // Fetch loyalty programs
+        fetchLoyaltyPrograms();
+      }
     } else {
-      throw new Error(data.message || 'Unknown error');
+      throw new Error(data.message || 'Unknown error occurred');
     }
   })
   .catch(error => {
@@ -427,7 +444,7 @@ function sendChatMessage(message) {
     // Show error message
     addMessageToChat({
       role: 'system',
-      content: 'Sorry, there was an error processing your request. Please try again.',
+      content: `Sorry, there was an error processing your request: ${error.message}. Please try again.`,
       timestamp: new Date(),
     });
   })
@@ -472,10 +489,23 @@ function hideTypingIndicator() {
  * Search for hotels based on query
  */
 function searchHotels(query) {
+  // Display loading state in search panel
+  const searchResults = document.getElementById('searchResults');
+  const detailsPanel = document.querySelector('.chat-details');
+  
+  // Show details panel with loading state
+  detailsPanel.style.display = 'flex';
+  searchResults.innerHTML = `
+    <div class="chat-details__loading">
+      <p>Searching for hotels...</p>
+      <div class="loading-spinner"></div>
+    </div>
+  `;
+  
   fetch(`${config.apiBaseUrl}/search?q=${encodeURIComponent(query)}`)
     .then(response => {
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        throw new Error(`Network error: ${response.status} ${response.statusText}`);
       }
       return response.json();
     })
@@ -486,10 +516,26 @@ function searchHotels(query) {
         
         // Render search results
         renderSearchResults(data.data);
+      } else {
+        throw new Error(data.message || 'Unknown error occurred');
       }
     })
     .catch(error => {
       console.error('Error searching hotels:', error);
+      
+      // Show error in search panel
+      searchResults.innerHTML = `
+        <div class="chat-details__error">
+          <p>Sorry, there was an error searching for hotels.</p>
+          <p class="error-details">${error.message}</p>
+          <button class="btn btn--outline" id="retrySearchButton">Retry Search</button>
+        </div>
+      `;
+      
+      // Add retry button functionality
+      document.getElementById('retrySearchButton')?.addEventListener('click', function() {
+        searchHotels(query);
+      });
     });
 }
 
@@ -510,6 +556,12 @@ function renderSearchResults(results) {
     searchResults.innerHTML = `
       <div class="chat-details__empty">
         <p>No results found for "${results.query}"</p>
+        <p class="no-results-suggestion">Try adjusting your search terms or exploring these options:</p>
+        <div class="suggestion-buttons">
+          <button class="btn btn--outline btn--small" onclick="searchHotels('hotel')">All Hotels</button>
+          <button class="btn btn--outline btn--small" onclick="searchHotels('luxury hotel')">Luxury Hotels</button>
+          <button class="btn btn--outline btn--small" onclick="searchHotels('budget hotel')">Budget Hotels</button>
+        </div>
       </div>
     `;
     return;
@@ -519,7 +571,8 @@ function renderSearchResults(results) {
   const resultsHTML = results.hotels.map(hotel => `
     <div class="hotel-card">
       <div class="hotel-card__image">
-        <img src="${hotel.image || 'assets/images/hotel-placeholder.jpg'}" alt="${hotel.name}">
+        <img src="${hotel.image || 'assets/images/hotel-placeholder.jpg'}" alt="${hotel.name}" 
+             onerror="this.src='assets/images/hotel-placeholder.jpg'">
       </div>
       <div class="hotel-card__content">
         <h4 class="hotel-card__name">${hotel.name}</h4>
@@ -547,6 +600,9 @@ function renderSearchResults(results) {
       <button class="btn btn--outline" id="saveSearchButton">
         Save Search
       </button>
+      <button class="btn btn--outline btn--secondary" id="refineSearchButton">
+        Refine Search
+      </button>
     </div>
   `;
   
@@ -561,6 +617,22 @@ function renderSearchResults(results) {
       content: 'Your search has been saved!',
       timestamp: new Date(),
     });
+  });
+  
+  // Add event listener for refine button
+  document.getElementById('refineSearchButton')?.addEventListener('click', function() {
+    console.log('Refine search clicked');
+    updateDebug('Refine search clicked');
+    
+    // Add a suggestion message to the chat
+    addMessageToChat({
+      role: 'assistant',
+      content: 'How would you like to refine your search? You can specify a location, price range, star rating, or amenities.',
+      timestamp: new Date(),
+    });
+    
+    // Focus on the chat input
+    document.getElementById('chatInput').focus();
   });
 }
 
@@ -609,13 +681,53 @@ function simulateVoiceRecognition() {
 }
 
 /**
+ * Fetch loyalty programs
+ */
+function fetchLoyaltyPrograms() {
+  fetch(`${config.apiBaseUrl}/loyalty/programs`)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Network error: ${response.status} ${response.statusText}`);
+      }
+      return response.json();
+    })
+    .then(data => {
+      if (data.status === 'success') {
+        // Show loyalty programs in a message
+        const programs = data.data.programs;
+        let message = 'Here are the available loyalty programs:\n\n';
+        
+        programs.forEach(program => {
+          message += `• **${program.name}** - Point Value: ${program.pointsValue} cents per point\n`;
+          message += `  Hotels: ${program.hotels.join(', ')}\n\n`;
+        });
+        
+        addMessageToChat({
+          role: 'assistant',
+          content: message,
+          timestamp: new Date(),
+        });
+      }
+    })
+    .catch(error => {
+      console.error('Error fetching loyalty programs:', error);
+      
+      addMessageToChat({
+        role: 'system',
+        content: `Sorry, there was an error retrieving loyalty program information: ${error.message}.`,
+        timestamp: new Date(),
+      });
+    });
+}
+
+/**
  * Load feature flags
  */
 function loadFeatureFlags() {
   fetch(`${config.apiBaseUrl}/features`)
     .then(response => {
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        throw new Error(`Network error: ${response.status} ${response.statusText}`);
       }
       return response.json();
     })
@@ -631,10 +743,23 @@ function loadFeatureFlags() {
             voiceButton.classList.add('hidden');
           }
         }
+        
+        // Apply dark mode preference if enabled in features
+        if (data.data.features.darkMode) {
+          // Only apply if user hasn't already set a preference
+          if (!localStorage.getItem('theme')) {
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (prefersDark) {
+              applyTheme('dark');
+            }
+          }
+        }
       }
     })
     .catch(error => {
       console.error('Error loading feature flags:', error);
+      // Fallback to defaults
+      config.enableVoice = true;
     });
 }
 

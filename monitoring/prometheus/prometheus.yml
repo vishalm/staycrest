@@ -1,22 +1,93 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  scrape_timeout: 10s
 
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      # - alertmanager:9093
+
+# Rule files to load
 rule_files:
   # - "first_rules.yml"
   # - "second_rules.yml"
 
+# Scrape configurations
 scrape_configs:
+  # Scrape Prometheus itself
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'staycrest'
-    metrics_path: '/api/health/metrics'
-    scrape_interval: 10s
-    static_configs:
-      - targets: ['host.docker.internal:3000']
-    
+  # Scrape Node Exporter
   - job_name: 'node-exporter'
     static_configs:
-      - targets: ['node-exporter:9100'] 
+      - targets: ['node-exporter:9100']
+
+  # Scrape StayCrest API Application
+  - job_name: 'staycrest-api'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['app:9091']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+)(?::[0-9]+)?'
+        replacement: '${1}'
+      - source_labels: [__address__]
+        target_label: __address__
+        regex: '([^:]+)(?::[0-9]+)?'
+        replacement: '${1}:9091'
+
+  # Scrape Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # Scrape MongoDB
+  - job_name: 'mongodb'
+    static_configs:
+      - targets: ['mongodb-exporter:9216']
+
+  # Scrape Postgres
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # Scrape OpenTelemetry Collector
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8889']
+
+  # Scrape Grafana
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+
+  # Scrape Docker containers (if using Container Advisor)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # Scrape Elasticsearch
+  - job_name: 'elasticsearch'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['elasticsearch-exporter:9114']
+
+# Remote write configuration (if needed)
+remote_write:
+  # - url: "http://remote-write-endpoint/api/v1/write"
+  #   remote_timeout: 30s
+  #   queue_config:
+  #     capacity: 10000
+  #     max_shards: 10
+  #     min_shards: 1
+
+# Remote read configuration (if needed)
+remote_read:
+  # - url: "http://remote-read-endpoint/api/v1/read"
+  #   read_recent: true 

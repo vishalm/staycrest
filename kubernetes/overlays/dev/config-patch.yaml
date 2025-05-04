@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: staycrest
+spec:
+  template:
+    spec:
+      containers:
+      - name: staycrest
+        env:
+        - name: DEBUG
+          value: "true"
+        - name: DEVELOPMENT_MODE
+          value: "true"
+        - name: ENABLE_DETAILED_LOGGING
+          value: "true"
+        - name: ENABLE_SWAGGER
+          value: "true"
+        - name: DEMO_MODE
+          value: "true" 

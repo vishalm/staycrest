@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- search-sources-config.yaml  # ConfigMap for search sources must be created first
+- search-sources-validator.yaml  # Validate search sources config
+- mongodb.yaml                # Database resources
+- redis.yaml
+- postgres.yaml
+- deployment.yaml             # Main application deployment 
+- observability.yaml          # Monitoring and observability
+
+namespace: staycrest
+
+commonLabels:
+  app: staycrest
+  version: v1
+  environment: production
+
+# Image configuration
+images:
+- name: staycrest
+  newName: registry.example.com/staycrest
+  newTag: latest 

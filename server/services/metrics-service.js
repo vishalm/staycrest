@@ -12,7 +12,7 @@ class MetricsRegistry {
   constructor() {
     this.metrics = {};
     this.contentType = 'text/plain; version=0.0.4';
-    this.logger = logger.createChildLogger('metrics-registry', { service: 'metrics' });
+    this.logger = logger;
     this.logger.info('Metrics registry initialized');
   }
   

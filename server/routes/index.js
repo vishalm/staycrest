@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../services/auth-service');
+const searchSourcesService = require('../services/search-sources-service');
 
 // @desc    Main API health check
 // @route   GET /api
@@ -20,52 +21,58 @@ router.get('/', (req, res) => {
 // @route   GET /api/loyalty/programs
 // @access  Public
 router.get('/loyalty/programs', (req, res) => {
-  // This should be from a proper database or config in production
-  const programs = [
-    {
-      id: 'marriott-bonvoy',
-      name: 'Marriott Bonvoy',
-      chains: ['Marriott', 'St. Regis', 'W Hotels', 'Westin', 'Sheraton'],
-      logo: 'https://example.com/bonvoy-logo.png',
-      website: 'https://www.marriott.com/loyalty.mi',
-    },
-    {
-      id: 'hilton-honors',
-      name: 'Hilton Honors',
-      chains: ['Hilton', 'DoubleTree', 'Hampton', 'Conrad', 'Waldorf Astoria'],
-      logo: 'https://example.com/hilton-logo.png',
-      website: 'https://www.hilton.com/en/hilton-honors/',
-    },
-    {
-      id: 'ihg-rewards',
-      name: 'IHG One Rewards',
-      chains: ['Holiday Inn', 'InterContinental', 'Crowne Plaza', 'Hotel Indigo'],
-      logo: 'https://example.com/ihg-logo.png',
-      website: 'https://www.ihg.com/rewardsclub/content/us/en/home',
-    },
-    {
-      id: 'hyatt-rewards',
-      name: 'World of Hyatt',
-      chains: ['Hyatt', 'Grand Hyatt', 'Park Hyatt', 'Hyatt Regency'],
-      logo: 'https://example.com/hyatt-logo.png',
-      website: 'https://world.hyatt.com/',
-    },
-    {
-      id: 'accor-hotels',
-      name: 'ALL - Accor Live Limitless',
-      chains: ['Sofitel', 'Novotel', 'Pullman', 'Mercure', 'ibis'],
-      logo: 'https://example.com/accor-logo.png',
-      website: 'https://all.accor.com/',
-    },
-  ];
+  try {
+    // Get loyalty programs from our centralized search sources configuration
+    const programs = searchSourcesService.getEnabledLoyaltyPrograms().map(program => ({
+      id: program.id,
+      name: program.name,
+      chains: program.partnerBrands || [],
+      logo: program.logo,
+      website: program.url,
+      description: program.description,
+      tiers: program.tiers || [],
+      features: program.features || []
+    }));
 
-  res.status(200).json({
-    status: 'success',
-    count: programs.length,
-    data: {
-      programs,
-    },
-  });
+    res.status(200).json({
+      status: 'success',
+      count: programs.length,
+      data: {
+        programs,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve loyalty programs',
+      error: error.message
+    });
+  }
+});
+
+// @desc    Get all search sources
+// @route   GET /api/search/sources
+// @access  Public
+router.get('/search/sources', (req, res) => {
+  try {
+    const sources = {
+      loyaltyPrograms: searchSourcesService.getEnabledLoyaltyPrograms(),
+      webSearch: searchSourcesService.getEnabledWebSearchProviders(),
+      aggregators: searchSourcesService.getEnabledAggregators(),
+      directBooking: searchSourcesService.getEnabledDirectBookingPlatforms()
+    };
+    
+    res.status(200).json({
+      status: 'success',
+      data: sources
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve search sources',
+      error: error.message
+    });
+  }
 });
 
 // @desc    Get supported hotel chains

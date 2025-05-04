@@ -1,42 +1,7 @@
 version: '3.8'
 
 services:
-  # PostgreSQL database with pgvector extension
-  postgres:
-    image: pgvector/pgvector:pg15
-    container_name: staycrest-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: staycrest
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Redis for caching and session storage
-  redis:
-    image: redis:7-alpine
-    container_name: staycrest-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # StayCrest application
+  # Application Service
   app:
     build:
       context: .
@@ -45,40 +10,312 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+      - "9091:9091"
     environment:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/staycrest
-      REDIS_URL: redis://redis:6379
-      SESSION_SECRET: staycrest-secret-key
-      JWT_SECRET: your-jwt-secret-key-here
-      JWT_EXPIRES_IN: 1d
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: gpt-3.5-turbo
+      - NODE_ENV=development
+      - PORT=3000
+      - MONGODB_URI=mongodb://mongodb:27017/staycrest
+      - REDIS_URI=redis://redis:6379
+      - JWT_SECRET=development_jwt_secret
+      - JWT_EXPIRES_IN=1d
+      - JWT_REFRESH_EXPIRES_IN=7
+      - SESSION_SECRET=development_session_secret
+      - FRONTEND_URL=http://localhost:3000
+      - LOG_LEVEL=debug
+      - WORKER_THREADS=4
+      - WORKER_PROCESSES=2
+      - ENABLE_METRICS=true
+      - ENABLE_TRACING=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
     volumes:
       - ./:/app
       - /app/node_modules
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - mongodb
+      - redis
+      - elasticsearch
+      - otel-collector
+    networks:
+      - staycrest-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health/liveness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
-  # Database administration tool (optional)
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: staycrest-pgadmin
+  # MongoDB Service
+  mongodb:
+    image: mongo:6
+    container_name: staycrest-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./monitoring/mongo-init:/docker-entrypoint-initdb.d
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+      - MONGO_INITDB_DATABASE=staycrest
+    command: ["--auth", "--replSet", "rs0"]
+    networks:
+      - staycrest-network
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # MongoDB replica set initializer
+  mongo-init:
+    image: mongo:6
+    container_name: staycrest-mongo-init
+    depends_on:
+      - mongodb
+    restart: on-failure
+    entrypoint: >
+      bash -c "
+        sleep 10 &&
+        mongo mongodb://admin:admin123@mongodb:27017/admin --eval \"
+          rs.initiate({
+            _id: 'rs0',
+            members: [{ _id: 0, host: 'mongodb:27017' }]
+          })
+        \"
+      "
+    networks:
+      - staycrest-network
+
+  # Redis Service
+  redis:
+    image: redis:7
+    container_name: staycrest-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./monitoring/redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "StrongRedisPassword123"]
+    networks:
+      - staycrest-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "StrongRedisPassword123", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Elasticsearch
+  elasticsearch:
+    image: elasticsearch:7.17.7
+    container_name: staycrest-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - staycrest-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Logstash
+  logstash:
+    image: logstash:7.17.7
+    container_name: staycrest-logstash
+    volumes:
+      - ./monitoring/logstash/pipeline:/usr/share/logstash/pipeline
+      - ./logs:/logs
+    depends_on:
+      - elasticsearch
+    networks:
+      - staycrest-network
+
+  # Kibana
+  kibana:
+    image: kibana:7.17.7
+    container_name: staycrest-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - staycrest-network
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.43.0
+    container_name: staycrest-prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - app
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - staycrest-network
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:9.5.1
+    container_name: staycrest-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=staycrest
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - staycrest-network
+
+  # Node Exporter for host metrics
+  node-exporter:
+    image: prom/node-exporter:v1.5.0
+    container_name: staycrest-node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - staycrest-network
+
+  # PostgreSQL for vector storage (if needed for RAG service)
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: staycrest-postgres
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@staycrest.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=staycrest
     ports:
-      - "5050:80"
+      - "5432:5432"
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - staycrest-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Adminer for database management
+  adminer:
+    image: adminer:latest
+    container_name: staycrest-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
     depends_on:
+      - mongodb
       - postgres
+    networks:
+      - staycrest-network
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.46
+    container_name: staycrest-jaeger
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=9411
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - staycrest-network
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.92.0
+    container_name: staycrest-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./monitoring/otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Metrics endpoint
+      - "8889:8889"   # Prometheus metrics
+    depends_on:
+      - jaeger
+    networks:
+      - staycrest-network
+    environment:
+      - ENVIRONMENT=development
+
+  # Connection pool manager
+  connection-pool:
+    image: tecnativa/tcp-proxy:0.7.0
+    container_name: staycrest-connection-pool
+    restart: unless-stopped
+    environment:
+      - LISTEN_PORT=27117
+      - TALK_PORT=27017
+      - TALK_HOST=mongodb
+      - TIMEOUT=600
+    ports:
+      - "27117:27117"
+    depends_on:
+      - mongodb
+    networks:
+      - staycrest-network
+
+networks:
+  staycrest-network:
+    driver: bridge
 
 volumes:
-  postgres_data:
+  mongodb_data:
   redis_data:
-  pgadmin_data: 
+  elasticsearch_data:
+  grafana_data:
+  postgres_data:
+  prometheus_data: 

@@ -1,11 +1,12 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: redis
   labels:
     app: redis
 spec:
-  replicas: 1
+  serviceName: redis-service
+  replicas: 3
   selector:
     matchLabels:
       app: redis
@@ -14,56 +15,92 @@ spec:
       labels:
         app: redis
     spec:
+      securityContext:
+        fsGroup: 1001
       containers:
       - name: redis
-        image: redis:7-alpine
-        args: ["--appendonly", "yes"]
+        image: redis:7
+        imagePullPolicy: IfNotPresent
+        command:
+        - redis-server
+        - "/etc/redis/redis.conf"
+        - "--requirepass"
+        - "$(REDIS_PASSWORD)"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
         ports:
-        - containerPort: 6379
-          name: redis
+        - name: redis
+          containerPort: 6379
+        - name: cluster
+          containerPort: 16379
         resources:
-          requests:
-            memory: "256Mi"
-            cpu: "100m"
           limits:
+            cpu: "1"
+            memory: "2Gi"
+          requests:
+            cpu: "250m"
             memory: "512Mi"
-            cpu: "500m"
-        volumeMounts:
-        - name: redis-data
-          mountPath: /data
         livenessProbe:
           exec:
             command:
-            - redis-cli
-            - ping
-          initialDelaySeconds: 15
-          periodSeconds: 5
+            - sh
+            - -c
+            - redis-cli -a $REDIS_PASSWORD ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
         readinessProbe:
           exec:
             command:
-            - redis-cli
-            - ping
-          initialDelaySeconds: 5
-          periodSeconds: 2
-          timeoutSeconds: 1
+            - sh
+            - -c
+            - redis-cli -a $REDIS_PASSWORD ping
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 2
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: redis-config
+          mountPath: /etc/redis
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: redis-password
       volumes:
       - name: redis-data
         persistentVolumeClaim:
           claimName: redis-data-pvc
+      - name: redis-config
+        configMap:
+          name: redis-config
 ---
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: ConfigMap
 metadata:
-  name: redis-data-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
-  storageClassName: standard
+  name: redis-config
+data:
+  redis.conf: |
+    bind 0.0.0.0
+    protected-mode yes
+    port 6379
+    cluster-enabled yes
+    cluster-config-file /data/nodes.conf
+    cluster-node-timeout 5000
+    maxmemory 1500mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    save 300 10
+    save 60 10000
+    appendonly yes
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
 ---
 apiVersion: v1
 kind: Service
@@ -72,10 +109,49 @@ metadata:
   labels:
     app: redis
 spec:
+  clusterIP: None
   selector:
     app: redis
   ports:
-  - port: 6379
+  - name: redis
+    port: 6379
     targetPort: 6379
-    name: redis
-  type: ClusterIP 
+  - name: cluster
+    port: 16379
+    targetPort: 16379
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-secret
+type: Opaque
+stringData:
+  redis-password: StrongRedisPassword789
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redis-cluster-init
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: redis-init
+        image: redis:7
+        command:
+        - sh
+        - -c
+        - |
+          sleep 60
+          redis-cli --cluster create \
+            redis-0.redis-service:6379 \
+            redis-1.redis-service:6379 \
+            redis-2.redis-service:6379 \
+            --cluster-replicas 0 -a $REDIS_PASSWORD --cluster-yes
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: redis-password 

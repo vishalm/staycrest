@@ -1,185 +1,250 @@
+/**
+ * Health Check Routes
+ * 
+ * Provides endpoints for health checking and readiness/liveness probes for Kubernetes.
+ */
+
 const express = require('express');
-const router = express.Router();
 const os = require('os');
-const prom = require('../services/metrics-service');
-const { protect, authorize } = require('../services/auth-service');
-const logger = require('../services/logging-service').getLogger('health');
+const mongoose = require('mongoose');
+const { version } = require('../../package.json');
+const workerThreadManager = require('../services/worker-thread-manager');
+const searchSourcesService = require('../services/search-sources-service');
 
-// Get services
-const webSearchService = require('../services/web-search-service');
-const toolManager = require('../mcp/tool-manager');
-const loggingService = require('../services/logging-service');
+const router = express.Router();
 
-// Initialize metrics
-prom.collectDefaultMetrics();
-const register = prom.register;
+// Track service start time for uptime calculation
+const startTime = Date.now();
 
-// Define custom metrics
-const searchLatency = new prom.Histogram(
-  'staycrest_search_latency_seconds',
-  'Search request latency in seconds',
-  ['source', 'type'],
-  [0.1, 0.5, 1, 2, 5, 10]
-);
+// Simple health check for load balancers
+router.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'staycrest-api',
+    version,
+    timestamp: new Date().toISOString()
+  });
+});
 
-const searchRequests = new prom.Counter(
-  'staycrest_search_requests_total',
-  'Total number of search requests',
-  ['source', 'status']
-);
+// Liveness probe for Kubernetes - checks if the service is running
+router.get('/liveness', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    service: 'staycrest-api',
+    version,
+    timestamp: new Date().toISOString()
+  });
+});
 
-const searchErrors = new prom.Counter(
-  'staycrest_search_errors_total',
-  'Total number of search errors',
-  ['source', 'code']
-);
-
-const cacheHitRatio = new prom.Gauge(
-  'staycrest_search_cache_hit_ratio',
-  'Search cache hit ratio'
-);
-
-const toolUsage = new prom.Counter(
-  'staycrest_tool_usage_total',
-  'Total number of tool executions',
-  ['tool', 'status']
-);
-
-const activeUsers = new prom.Gauge(
-  'staycrest_active_users',
-  'Number of active users'
-);
-
-/**
- * @desc    Get system health status
- * @route   GET /api/health
- * @access  Public
- */
-router.get('/', async (req, res) => {
+// Readiness probe for Kubernetes - checks if the service is ready to receive traffic
+router.get('/readiness', async (req, res) => {
+  // Check database connection
+  const isMongoConnected = mongoose.connection.readyState === 1; // 1 = connected
+  
+  // Check Redis connection (you might need to adapt this based on your Redis connection)
+  let isRedisConnected = false;
   try {
-    // Basic system info
-    const systemInfo = {
-      uptime: process.uptime(),
-      memory: {
-        free: os.freemem(),
-        total: os.totalmem()
-      },
-      cpus: os.cpus().length,
-      loadAvg: os.loadavg()
-    };
-    
-    // Check search service health
-    let searchStatus = { initialized: false };
-    try {
-      searchStatus = await webSearchService.healthCheck();
-    } catch (error) {
-      logger.error('Error getting search service health', { error: error.message });
+    const redisClient = req.app.get('redisClient');
+    isRedisConnected = redisClient && redisClient.isReady;
+  } catch (error) {
+    console.error('Error checking Redis connection:', error);
+  }
+  
+  // Check worker thread manager
+  let isWorkerManagerReady = false;
+  try {
+    const workerStats = workerThreadManager.getStats();
+    isWorkerManagerReady = workerStats.initialized;
+  } catch (error) {
+    console.error('Error checking worker thread manager:', error);
+  }
+  
+  // Check search sources service
+  let isSearchSourcesReady = false;
+  try {
+    const searchSourcesStatus = searchSourcesService.getStatus();
+    isSearchSourcesReady = searchSourcesStatus.initialized;
+  } catch (error) {
+    console.error('Error checking search sources service:', error);
+  }
+  
+  // Overall readiness status
+  const isReady = isMongoConnected && isRedisConnected && isWorkerManagerReady && isSearchSourcesReady;
+  
+  const status = {
+    status: isReady ? 'ok' : 'not_ready',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    service: 'staycrest-api',
+    version,
+    timestamp: new Date().toISOString(),
+    dependencies: {
+      mongodb: isMongoConnected ? 'connected' : 'disconnected',
+      redis: isRedisConnected ? 'connected' : 'disconnected',
+      workerThreads: isWorkerManagerReady ? 'ready' : 'not_ready',
+      searchSources: isSearchSourcesReady ? 'ready' : 'not_ready'
     }
+  };
+  
+  res.status(isReady ? 200 : 503).json(status);
+});
+
+// Startup probe for Kubernetes - checks if the service has completed initialization
+router.get('/startup', async (req, res) => {
+  // Check if all required services are initialized
+  let isStartupComplete = false;
+  
+  try {
+    // Check if database connection is established
+    const isMongoConnected = mongoose.connection.readyState === 1;
     
-    // Collect statuses from other components
-    const statuses = {
-      system: {
-        healthy: true,
-        ...systemInfo
+    // Check if worker thread manager is initialized
+    const workerStats = workerThreadManager.getStats();
+    const isWorkerManagerReady = workerStats.initialized;
+    
+    // Check if Redis is connected
+    const redisClient = req.app.get('redisClient');
+    const isRedisConnected = redisClient && redisClient.isReady;
+    
+    // Check search sources service
+    const searchSourcesStatus = searchSourcesService.getStatus();
+    const isSearchSourcesReady = searchSourcesStatus.initialized;
+    
+    // Overall startup status
+    isStartupComplete = isMongoConnected && isWorkerManagerReady && isRedisConnected && isSearchSourcesReady;
+    
+    res.status(isStartupComplete ? 200 : 503).json({
+      status: isStartupComplete ? 'ok' : 'initializing',
+      uptime: Math.floor((Date.now() - startTime) / 1000),
+      service: 'staycrest-api',
+      version,
+      timestamp: new Date().toISOString(),
+      dependencies: {
+        mongodb: isMongoConnected ? 'connected' : 'disconnected',
+        redis: isRedisConnected ? 'connected' : 'disconnected',
+        workerThreads: isWorkerManagerReady ? 'ready' : 'not_ready',
+        searchSources: isSearchSourcesReady ? 'ready' : 'not_ready'
+      }
+    });
+  } catch (error) {
+    console.error('Error checking startup status:', error);
+    res.status(500).json({
+      status: 'error',
+      uptime: Math.floor((Date.now() - startTime) / 1000),
+      service: 'staycrest-api',
+      version,
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
+
+// Detailed system information for internal monitoring
+router.get('/system', (req, res) => {
+  const memoryUsage = process.memoryUsage();
+  const systemInfo = {
+    status: 'ok',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    service: 'staycrest-api',
+    version,
+    timestamp: new Date().toISOString(),
+    system: {
+      hostname: os.hostname(),
+      platform: os.platform(),
+      arch: os.arch(),
+      cpus: os.cpus().length,
+      memory: {
+        total: os.totalmem(),
+        free: os.freemem(),
+        usage: Math.round((1 - os.freemem() / os.totalmem()) * 100)
       },
-      services: {
-        search: searchStatus
-      }
-    };
-    
-    // Determine overall health
-    const isHealthy = searchStatus.healthy;
-    
-    // Return appropriate status code based on health
-    res.status(isHealthy ? 200 : 503).json({
-      status: isHealthy ? 'healthy' : 'unhealthy',
-      timestamp: new Date(),
-      ...statuses
-    });
-  } catch (error) {
-    logger.error('Health check failed', { error: error.message });
-    res.status(500).json({
-      status: 'error',
-      message: 'Health check failed',
-      error: error.message
-    });
-  }
+      loadAvg: os.loadavg(),
+      network: Object.entries(os.networkInterfaces())
+        .reduce((acc, [name, interfaces]) => {
+          acc[name] = interfaces.map(iface => ({
+            address: iface.address,
+            family: iface.family,
+            internal: iface.internal
+          }));
+          return acc;
+        }, {})
+    },
+    process: {
+      pid: process.pid,
+      ppid: process.ppid,
+      platform: process.platform,
+      arch: process.arch,
+      version: process.version,
+      memory: {
+        rss: memoryUsage.rss,
+        heapTotal: memoryUsage.heapTotal,
+        heapUsed: memoryUsage.heapUsed,
+        external: memoryUsage.external,
+        arrayBuffers: memoryUsage.arrayBuffers
+      },
+      uptime: process.uptime(),
+      env: process.env.NODE_ENV || 'development'
+    }
+  };
+  
+  res.status(200).json(systemInfo);
 });
 
-/**
- * @desc    Get detailed system status (admin only)
- * @route   GET /api/health/status
- * @access  Admin/SuperAdmin
- */
-router.get('/status', protect, authorize('admin', 'superadmin'), async (req, res) => {
+// Detailed worker thread information
+router.get('/workers', (req, res) => {
   try {
-    // Get detailed status from all components
-    const searchStatus = await webSearchService.healthCheck();
-    const toolsStatus = toolManager.getMetrics();
-    const loggersStatus = loggingService.getLoggers();
+    const workerStats = workerThreadManager.getStats();
     
-    // Get memory usage
-    const memoryUsage = process.memoryUsage();
-    
-    // Return detailed status
     res.status(200).json({
-      status: 'success',
-      timestamp: new Date(),
-      search: searchStatus,
-      tools: toolsStatus,
-      logging: loggersStatus,
-      system: {
-        uptime: process.uptime(),
-        memory: {
-          rss: memoryUsage.rss,
-          heapTotal: memoryUsage.heapTotal,
-          heapUsed: memoryUsage.heapUsed,
-          external: memoryUsage.external,
-          free: os.freemem(),
-          total: os.totalmem()
-        },
-        cpus: os.cpus().length,
-        loadAvg: os.loadavg(),
-        platform: os.platform(),
-        arch: os.arch(),
-        nodeVersion: process.version,
-        env: process.env.NODE_ENV
-      }
+      status: 'ok',
+      service: 'staycrest-api',
+      version,
+      timestamp: new Date().toISOString(),
+      workerThreads: workerStats
     });
   } catch (error) {
-    logger.error('Status check failed', { error: error.message });
     res.status(500).json({
       status: 'error',
-      message: 'Status check failed',
+      service: 'staycrest-api',
+      version,
+      timestamp: new Date().toISOString(),
       error: error.message
     });
   }
 });
 
-/**
- * @desc    Prometheus metrics endpoint
- * @route   GET /api/health/metrics
- * @access  Public
- */
-router.get('/metrics', async (req, res) => {
+// Search sources service status
+router.get('/search-sources', (req, res) => {
   try {
-    res.set('Content-Type', register.contentType);
-    res.end(await register.metrics());
+    const searchSourcesStatus = searchSourcesService.getStatus();
+    
+    res.status(200).json({
+      status: 'ok',
+      service: 'staycrest-api',
+      version,
+      timestamp: new Date().toISOString(),
+      searchSources: {
+        initialized: searchSourcesStatus.initialized,
+        loyaltyProgramsCount: searchSourcesStatus.loyaltyProgramsCount,
+        webSearchProvidersCount: searchSourcesStatus.webSearchProvidersCount,
+        aggregatorsCount: searchSourcesStatus.aggregatorsCount,
+        directBookingPlatformsCount: searchSourcesStatus.directBookingPlatformsCount,
+        enabledProvidersCount: searchSourcesStatus.enabledProvidersCount
+      }
+    });
   } catch (error) {
-    logger.error('Metrics collection failed', { error: error.message });
-    res.status(500).send('Error collecting metrics');
+    res.status(500).json({
+      status: 'error',
+      service: 'staycrest-api',
+      version,
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
   }
 });
 
-// Export metrics for instrumentation
+// Export router and constants
 module.exports = {
   router,
-  metrics: {
-    searchLatency,
-    searchRequests,
-    searchErrors,
-    cacheHitRatio,
-    toolUsage,
-    activeUsers
-  }
+  startTime
 }; 

@@ -18,7 +18,7 @@ class ToolManager {
       lastExecution: {},
       lastError: {}
     };
-    this.logger = logger.createChildLogger('tool-manager', { service: 'mcp' });
+    this.logger = logger;
     this.logger.info('Tool Manager initialized');
   }
   
@@ -401,7 +401,7 @@ class ToolManager {
       // Register the composed tool
       return this.registerTool(name, composedTool, schema);
     } catch (error) {
-      logger.error(`Error composing tool ${name}: ${error.message}`);
+      this.logger.error(`Error composing tool ${name}: ${error.message}`);
       return false;
     }
   }

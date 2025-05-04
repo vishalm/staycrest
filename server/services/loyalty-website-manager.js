@@ -719,7 +719,7 @@ class LoyaltyWebsiteManager {
    * Export sources configuration
    */
   exportSources() {
-    return JSON.stringify(this.getAllSources(), null, 2);
+    return JSON.stringify(Array.from(this.sources.values()));
   }
   
   /**
@@ -727,16 +727,9 @@ class LoyaltyWebsiteManager {
    */
   importSources(jsonConfig) {
     const sources = JSON.parse(jsonConfig);
-    sources.forEach(source => {
-      this.addSource(source);
-    });
-    
-    analyticsService.trackEvent('loyalty_sources_imported', {
-      count: sources.length
-    });
-    
-    return this.getAllSources();
+    sources.forEach(source => this.addSource(source));
+    return this.sources.size;
   }
 }
 
-module.exports = new LoyaltyWebsiteManager();
+module.exports = LoyaltyWebsiteManager;

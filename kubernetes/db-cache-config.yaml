@@ -1,0 +1,249 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-cache-config
+data:
+  db-cache.js: |
+    /**
+     * StayCrest Database Cache Configuration
+     * Kubernetes ConfigMap version
+     */
+    
+    const DBCacheConfig = {
+      redis: {
+        mainCache: {
+          enabled: true,
+          ttl: 3600, // 1 hour default TTL
+          maxSize: '1.5gb',
+          keyPrefix: 'staycrest:',
+          persistenceStrategy: 'rdb-aof', // Combined RDB and AOF persistence
+          evictionPolicy: 'allkeys-lru',
+          compressionEnabled: true,
+          compressionThreshold: '1kb',
+          partitions: [
+            {
+              name: 'hotel-data',
+              keyPattern: 'hotel:*',
+              ttl: 7200 // 2 hours
+            },
+            {
+              name: 'search-results',
+              keyPattern: 'search:*',
+              ttl: 1800 // 30 minutes
+            },
+            {
+              name: 'user-sessions',
+              keyPattern: 'session:*',
+              ttl: 86400 // 24 hours
+            },
+            {
+              name: 'api-responses',
+              keyPattern: 'api:*',
+              ttl: 300 // 5 minutes
+            }
+          ]
+        },
+        searchCache: {
+          enabled: true,
+          ttl: 1800, // 30 minutes default TTL
+          maxSize: '500mb',
+          keyPrefix: 'staycrest:search:',
+          evictionPolicy: 'volatile-lru',
+          dynamicTtl: {
+            enabled: true,
+            algorithms: ['popularity', 'freshness', 'query-complexity']
+          }
+        },
+        rateLimit: {
+          enabled: true,
+          keyPrefix: 'staycrest:ratelimit:',
+          ttl: 60 // 1 minute
+        }
+      },
+      
+      mongodb: {
+        cacheSettings: {
+          enabled: true,
+          collections: {
+            hotels: {
+              ttl: 86400, // 24 hours
+              indexes: ['location', 'price', 'rating', 'amenities'],
+              queryPatterns: [
+                { pattern: { location: 1 }, ttl: 43200 }, // 12 hours
+                { pattern: { 'amenities.pool': 1 }, ttl: 86400 } // 24 hours
+              ]
+            },
+            reviews: {
+              ttl: 172800, // 48 hours
+              indexes: ['hotelId', 'rating', 'date'],
+              queryPatterns: [
+                { pattern: { hotelId: 1, rating: 1 }, ttl: 86400 } // 24 hours
+              ]
+            },
+            bookings: {
+              ttl: 300, // 5 minutes - short ttl for frequently updated data
+              indexes: ['userId', 'hotelId', 'dates'],
+              queryPatterns: [
+                { pattern: { userId: 1 }, ttl: 300 } // 5 minutes
+              ]
+            },
+            users: {
+              ttl: 3600, // 1 hour
+              indexes: ['email', 'preferences.location'],
+              queryPatterns: [
+                { pattern: { email: 1 }, ttl: 3600 } // 1 hour
+              ]
+            }
+          },
+          invalidationTriggers: [
+            { collection: 'hotels', operations: ['insert', 'update', 'delete'] },
+            { collection: 'reviews', operations: ['insert', 'update', 'delete'] }
+          ]
+        },
+        replicationSettings: {
+          enabled: true,
+          readPreference: 'secondaryPreferred',
+          secondaryAcceptableLatencyMS: 15,
+          tagSets: [
+            { region: 'us-east', role: 'read' },
+            { region: 'us-west', role: 'read' }
+          ]
+        }
+      },
+      
+      postgres: {
+        pgbouncer: {
+          enabled: true,
+          poolMode: 'transaction',
+          maxClientConnections: 100,
+          defaultPoolSize: 20,
+          minPoolSize: 5,
+          reservePoolSize: 5,
+          maxClientIdleTime: 300 // 5 minutes
+        },
+        pgvectorCache: {
+          enabled: true,
+          indexes: {
+            hotelDescriptions: {
+              dimensions: 384,
+              indexType: 'ivfflat',
+              lists: 100
+            },
+            amenityFeatures: {
+              dimensions: 128,
+              indexType: 'hnsw',
+              m: 16,
+              efConstruction: 100
+            }
+          }
+        },
+        queryCache: {
+          enabled: true,
+          ttl: 3600, // 1 hour
+          maxSize: '200mb',
+          preparedStatements: true,
+          tables: [
+            {
+              name: 'hotel_details',
+              ttl: 86400, // 24 hours
+              invalidateOn: ['INSERT', 'UPDATE', 'DELETE']
+            },
+            {
+              name: 'hotel_images',
+              ttl: 604800, // 7 days
+              invalidateOn: ['INSERT', 'UPDATE', 'DELETE']
+            },
+            {
+              name: 'location_metadata',
+              ttl: 2592000, // 30 days
+              invalidateOn: ['UPDATE', 'DELETE']
+            }
+          ]
+        }
+      },
+      
+      globalSettings: {
+        cacheStrategy: 'layered', // Options: layered, distributed, local
+        healthCheck: {
+          interval: 60, // seconds
+          timeoutThreshold: 5, // seconds
+          failureThreshold: 3
+        },
+        metrics: {
+          enabled: true,
+          collectInterval: 15, // seconds
+          retentionPeriod: 86400 // 1 day
+        },
+        fallbackStrategy: 'stale-while-revalidate', // Options: stale-while-revalidate, fail-open, fail-closed
+        circuitBreaker: {
+          enabled: true,
+          failureThreshold: 5,
+          resetTimeout: 30 // seconds
+        }
+      }
+    };
+    
+    module.exports = DBCacheConfig;
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-cache-validator
+  labels:
+    app: staycrest
+    component: cache-validator
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: staycrest
+        component: cache-validator
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: validator
+        image: staycrest:latest
+        command: ["node", "-e", "
+          const DBCacheConfig = require('/app/config/db-cache.js');
+          console.log('Validating database cache configuration...');
+          
+          // Check Redis configuration
+          if (!DBCacheConfig.redis || !DBCacheConfig.redis.mainCache || !DBCacheConfig.redis.mainCache.enabled) {
+            console.error('Error: Redis main cache configuration is missing or disabled');
+            process.exit(1);
+          }
+          
+          // Check MongoDB configuration
+          if (!DBCacheConfig.mongodb || !DBCacheConfig.mongodb.cacheSettings || !DBCacheConfig.mongodb.cacheSettings.enabled) {
+            console.error('Error: MongoDB cache configuration is missing or disabled');
+            process.exit(1);
+          }
+          
+          // Check Postgres configuration
+          if (!DBCacheConfig.postgres || !DBCacheConfig.postgres.pgbouncer || !DBCacheConfig.postgres.pgbouncer.enabled) {
+            console.error('Error: Postgres connection pooling configuration is missing or disabled');
+            process.exit(1);
+          }
+          
+          // Check global settings
+          if (!DBCacheConfig.globalSettings || !DBCacheConfig.globalSettings.cacheStrategy) {
+            console.error('Error: Global cache settings are missing');
+            process.exit(1);
+          }
+          
+          console.log('Configuration validation successful!');
+          console.log('Redis cache configuration validated');
+          console.log('MongoDB cache configuration validated');
+          console.log('Postgres connection pooling configuration validated');
+          console.log('Global cache settings validated');
+          process.exit(0);
+        "]
+        volumeMounts:
+        - name: db-cache-config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: db-cache-config
+        configMap:
+          name: db-cache-config 

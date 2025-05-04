@@ -3,6 +3,7 @@
  */
 const logger = require('../services/logging-service').getLogger('search-agent');
 const { metrics } = require('../routes/health');
+const SearchSources = require('../config/search-sources');
 
 class SearchAgent {
   constructor(llmProvider, searchService) {
@@ -11,7 +12,8 @@ class SearchAgent {
     this.isInitialized = false;
     this.searchCache = new Map();
     this.cacheTTL = 3600000; // 1 hour in milliseconds
-    this.logger = logger.createChildLogger('search-agent', { agent: 'search' });
+    this.logger = logger;
+    this.searchSources = SearchSources;
     
     // Add diagnostic information
     this.diagnostics = {
@@ -23,6 +25,37 @@ class SearchAgent {
       searchErrors: 0,
       llmErrors: 0,
       serviceErrors: 0
+    };
+    
+    // Safe metrics helper - prevents errors when metrics aren't available
+    this.safeMetrics = {
+      increment: (metric, labels) => {
+        try {
+          if (metrics && metrics[metric] && typeof metrics[metric].inc === 'function') {
+            metrics[metric].inc(labels);
+          }
+        } catch (error) {
+          // Silently ignore metrics errors
+        }
+      },
+      observe: (metric, labels, value) => {
+        try {
+          if (metrics && metrics[metric] && typeof metrics[metric].observe === 'function') {
+            metrics[metric].observe(labels, value);
+          }
+        } catch (error) {
+          // Silently ignore metrics errors
+        }
+      },
+      set: (metric, labels, value) => {
+        try {
+          if (metrics && metrics[metric] && typeof metrics[metric].set === 'function') {
+            metrics[metric].set(labels, value);
+          }
+        } catch (error) {
+          // Silently ignore metrics errors
+        }
+      }
     };
     
     this.logger.info('Search agent created', {
@@ -105,16 +138,12 @@ class SearchAgent {
             age: Date.now() - cachedResult.timestamp 
           });
           
-          // Attempt to update metrics
-          try {
-            metrics.searchRequests.inc({ source: 'cache', status: 'success' });
-            
-            // Update cache hit ratio
-            const cacheHitRatio = this.calculateCacheHitRatio();
-            metrics.cacheHitRatio.set({}, cacheHitRatio);
-          } catch (e) {
-            // Metrics not available, ignore
-          }
+          // Update metrics safely
+          this.safeMetrics.increment('searchRequests', { source: 'cache', status: 'success' });
+          
+          // Update cache hit ratio
+          const cacheHitRatio = this.calculateCacheHitRatio();
+          this.safeMetrics.set('cacheHitRatio', {}, cacheHitRatio);
           
           this.diagnostics.searchSuccess++;
           
@@ -135,12 +164,8 @@ class SearchAgent {
       if (!searchParams.location && !searchParams.query) {
         this.logger.warn('No location found in search query', { searchId, query });
         
-        // Attempt to update metrics
-        try {
-          metrics.searchErrors.inc({ source: 'extraction', code: 'no_location' });
-        } catch (e) {
-          // Metrics not available, ignore
-        }
+        // Update metrics safely
+        this.safeMetrics.increment('searchErrors', { source: 'extraction', code: 'no_location' });
         
         return {
           error: true,
@@ -157,12 +182,8 @@ class SearchAgent {
         params: searchParams 
       });
       
-      // Attempt to update metrics
-      try {
-        metrics.searchRequests.inc({ source: 'api', status: 'pending' });
-      } catch (e) {
-        // Metrics not available, ignore
-      }
+      // Update metrics safely
+      this.safeMetrics.increment('searchRequests', { source: 'api', status: 'pending' });
       
       const searchStart = process.hrtime();
       
@@ -190,17 +211,13 @@ class SearchAgent {
         
         this.diagnostics.serviceErrors++;
         
-        // Attempt to update metrics
-        try {
-          const [seconds, nanoseconds] = process.hrtime(searchStart);
-          const searchLatencyMs = (seconds * 1000) + (nanoseconds / 1000000);
-          
-          metrics.searchLatency.observe({ source: 'api', type: 'failed' }, searchLatencyMs / 1000);
-          metrics.searchRequests.inc({ source: 'api', status: 'error' });
-          metrics.searchErrors.inc({ source: 'api', code: error.code || 'unknown' });
-        } catch (e) {
-          // Metrics not available, ignore
-        }
+        // Update metrics safely
+        const [seconds, nanoseconds] = process.hrtime(searchStart);
+        const searchLatencyMs = (seconds * 1000) + (nanoseconds / 1000000);
+        
+        this.safeMetrics.observe('searchLatency', { source: 'api', type: 'failed' }, searchLatencyMs / 1000);
+        this.safeMetrics.increment('searchRequests', { source: 'api', status: 'error' });
+        this.safeMetrics.increment('searchErrors', { source: 'api', code: error.code || 'unknown' });
         
         throw error;
       }
@@ -215,13 +232,9 @@ class SearchAgent {
         resultCount: results?.hotels?.length || 0
       });
       
-      // Attempt to update metrics
-      try {
-        metrics.searchLatency.observe({ source: 'api', type: 'success' }, searchLatencyMs / 1000);
-        metrics.searchRequests.inc({ source: 'api', status: 'success' });
-      } catch (e) {
-        // Metrics not available, ignore
-      }
+      // Update metrics safely
+      this.safeMetrics.observe('searchLatency', { source: 'api', type: 'success' }, searchLatencyMs / 1000);
+      this.safeMetrics.increment('searchRequests', { source: 'api', status: 'success' });
       
       if (!results) {
         this.logger.error('Search service returned null results', { searchId });
@@ -327,6 +340,11 @@ class SearchAgent {
         };
       }
       
+      // Get available loyalty programs from configuration
+      const loyaltyPrograms = Object.keys(this.searchSources.loyaltyPrograms)
+        .map(key => this.searchSources.loyaltyPrograms[key].name)
+        .join(', ');
+      
       const prompt = `
 Extract search parameters from this hotel search query:
 "${query}"
@@ -339,8 +357,9 @@ Consider:
 5. Price range
 6. Hotel amenities
 7. Star rating
-8. Loyalty programs mentioned
-9. Special requirements
+8. Special requirements
+
+Available loyalty programs: ${loyaltyPrograms}
 
 Format your response as a JSON object with these fields:
 {
@@ -362,6 +381,7 @@ Format your response as a JSON object with these fields:
   "specialRequirements": [strings]
 }
 
+For loyaltyPrograms, only include programs from the list of available programs above.
 Only include fields where you have extracted specific information from the query.
 `;
       
@@ -422,7 +442,7 @@ Only include fields where you have extracted specific information from the query
         
         // Attempt to update metrics
         try {
-          metrics.searchLatency.observe({ source: 'llm', type: 'extraction' }, llmLatencyMs / 1000);
+          this.safeMetrics.observe('searchLatency', { source: 'llm', type: 'extraction' }, llmLatencyMs / 1000);
         } catch (e) {
           // Metrics not available, ignore
         }
@@ -517,9 +537,32 @@ Only include fields where you have extracted specific information from the query
       let score = 100; // Base score
       
       // Adjust score based on match to loyalty programs
-      if (searchParams.loyaltyPrograms && 
-          searchParams.loyaltyPrograms.includes(hotel.loyaltyProgram)) {
-        score += 50;
+      if (searchParams.loyaltyPrograms && searchParams.loyaltyPrograms.length > 0) {
+        // Look for exact matches on loyalty program
+        if (hotel.loyaltyProgram && searchParams.loyaltyPrograms.includes(hotel.loyaltyProgram)) {
+          score += 50;
+        }
+        
+        // Check if the hotel is part of a brand that belongs to a requested loyalty program
+        const requestedPrograms = searchParams.loyaltyPrograms.map(name => {
+          // Find program ID from name
+          for (const key in this.searchSources.loyaltyPrograms) {
+            if (this.searchSources.loyaltyPrograms[key].name === name) {
+              return this.searchSources.loyaltyPrograms[key];
+            }
+          }
+          return null;
+        }).filter(program => program !== null);
+        
+        // Check if hotel brand is in partnerBrands of any requested program
+        if (hotel.brand) {
+          for (const program of requestedPrograms) {
+            if (program.partnerBrands && program.partnerBrands.includes(hotel.brand)) {
+              score += 30;
+              break;
+            }
+          }
+        }
       }
       
       // Adjust score based on star rating
@@ -567,6 +610,33 @@ Only include fields where you have extracted specific information from the query
     
     const top3Hotels = hotels.slice(0, 3);
     
+    // Get loyalty program information if applicable
+    let loyaltyProgramsInfo = "";
+    if (searchParams.loyaltyPrograms && searchParams.loyaltyPrograms.length > 0) {
+      const requestedPrograms = searchParams.loyaltyPrograms.map(name => {
+        // Find program from name
+        for (const key in this.searchSources.loyaltyPrograms) {
+          const program = this.searchSources.loyaltyPrograms[key];
+          if (program.name === name) {
+            return {
+              name: program.name,
+              description: program.description,
+              features: program.features?.slice(0, 2) || [],
+              pointsValue: program.pointsValue
+            };
+          }
+        }
+        return null;
+      }).filter(program => program !== null);
+      
+      if (requestedPrograms.length > 0) {
+        loyaltyProgramsInfo = `
+LOYALTY PROGRAMS INFORMATION:
+${JSON.stringify(requestedPrograms, null, 2)}
+`;
+      }
+    }
+    
     const prompt = `
 Generate a brief summary of these hotel search results:
 
@@ -575,6 +645,7 @@ ${JSON.stringify(searchParams, null, 2)}
 
 TOP RESULTS:
 ${JSON.stringify(top3Hotels, null, 2)}
+${loyaltyProgramsInfo}
 
 Create a concise summary that highlights:
 1. Number of hotels found
@@ -583,12 +654,14 @@ Create a concise summary that highlights:
 4. Any exceptional deals or values
 5. Brief mention of top-rated properties
 
+If loyalty programs were mentioned in the search, include specific benefits that apply to these results.
+
 Keep it under 150 words, conversational, and focused on the most relevant information.
 `;
     
     const summary = await this.llmProvider.generateResponse(prompt, {
       temperature: 0.7,
-      max_tokens: 200
+      max_tokens: 250
     });
     
     return summary;
@@ -601,28 +674,43 @@ Keep it under 150 words, conversational, and focused on the most relevant inform
    */
   async getReviews(hotelId) {
     try {
+      if (!this.searchService || typeof this.searchService.getHotelReviews !== 'function') {
+        throw new Error('Hotel review service not available');
+      }
+      
       const reviews = await this.searchService.getHotelReviews(hotelId);
       
-      // Summarize reviews if there are many
-      if (reviews.length > 5) {
-        const summary = await this.summarizeReviews(reviews);
-        return {
-          hotelId,
-          reviews: reviews.slice(0, 5), // Return only top 5 reviews
-          summary,
-          totalCount: reviews.length,
-          timestamp: new Date()
-        };
+      // Summarize reviews if there are many and LLM is available
+      if (reviews.length > 5 && this.llmProvider) {
+        try {
+          const summary = await this.summarizeReviews(reviews);
+          return {
+            hotelId,
+            reviews: reviews.slice(0, 5), // Return only top 5 reviews
+            summary,
+            totalCount: reviews.length,
+            timestamp: new Date()
+          };
+        } catch (error) {
+          // If summary fails, just return the reviews without summary
+          this.logger.warn(`Review summarization failed: ${error.message}`, { hotelId });
+          return {
+            hotelId,
+            reviews: reviews.slice(0, 10), // Return top 10 reviews when summary fails
+            totalCount: reviews.length,
+            timestamp: new Date()
+          };
+        }
       }
       
       return {
         hotelId,
-        reviews,
+        reviews: reviews.slice(0, 10), // Cap at 10 reviews
         totalCount: reviews.length,
         timestamp: new Date()
       };
     } catch (error) {
-      console.error(`Error fetching reviews for hotel ${hotelId}:`, error);
+      this.logger.error(`Error fetching reviews for hotel ${hotelId}: ${error.message}`);
       throw error;
     }
   }
@@ -725,10 +813,27 @@ Keep your summary concise and balanced.
         this.logger.error('Health check search test failed', { error: error.message });
       }
       
+      // Get available search sources
+      const availableSources = {
+        loyaltyPrograms: Object.keys(this.searchSources.loyaltyPrograms).filter(
+          key => this.searchSources.loyaltyPrograms[key].enabled
+        ).length,
+        webSearch: Object.keys(this.searchSources.webSearch.providers).filter(
+          key => this.searchSources.webSearch.providers[key].enabled
+        ).length,
+        aggregators: Object.keys(this.searchSources.hotelAggregators).filter(
+          key => this.searchSources.hotelAggregators[key].enabled
+        ).length,
+        directBooking: Object.keys(this.searchSources.directBooking).filter(
+          key => this.searchSources.directBooking[key].enabled
+        ).length
+      };
+      
       return {
         ...status,
         healthy: this.isInitialized && searchWorking,
         searchWorking,
+        availableSources,
         timestamp: new Date()
       };
     } catch (error) {

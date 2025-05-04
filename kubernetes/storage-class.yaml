@@ -1,0 +1,40 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: staycrest-ssd
+  labels:
+    app: staycrest
+provisioner: kubernetes.io/gce-pd  # This will vary depending on cloud provider
+parameters:
+  type: pd-ssd
+  fsType: ext4
+  replication-type: none
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: staycrest-hdd
+  labels:
+    app: staycrest
+provisioner: kubernetes.io/gce-pd  # This will vary depending on cloud provider
+parameters:
+  type: pd-standard
+  fsType: ext4
+  replication-type: none
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+# Local development with Minikube or Kind
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+  labels:
+    app: staycrest
+provisioner: k8s.io/minikube-hostpath
+volumeBindingMode: Immediate
+reclaimPolicy: Delete 
