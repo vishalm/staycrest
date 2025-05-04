@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # Elasticsearch
+  elasticsearch:
+    image: elasticsearch:7.17.7
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - monitoring_network
+
+  # Logstash
+  logstash:
+    image: logstash:7.17.7
+    volumes:
+      - ./monitoring/logstash/pipeline:/usr/share/logstash/pipeline
+      - ./logs:/logs
+    depends_on:
+      - elasticsearch
+    networks:
+      - monitoring_network
+
+  # Kibana
+  kibana:
+    image: kibana:7.17.7
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - monitoring_network
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.43.0
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring_network
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:9.5.1
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=staycrest
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring_network
+
+networks:
+  monitoring_network:
+    driver: bridge
+
+volumes:
+  elasticsearch_data:
+  grafana_data: 

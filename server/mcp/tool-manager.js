@@ -1,19 +1,6 @@
 // server/mcp/tool-manager.js
 
-const winston = require('winston');
-
-// Configure logger
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console(),
-    new winston.transports.File({ filename: 'logs/tool-manager.log' })
-  ],
-});
+const logger = require('../services/logging-service').getLogger('tool-manager');
 
 /**
  * MCP Tool Manager for registering and executing tools
@@ -28,7 +15,11 @@ class ToolManager {
       toolUsage: {},
       averageExecutionTime: {},
       totalExecutionTime: {},
+      lastExecution: {},
+      lastError: {}
     };
+    this.logger = logger.createChildLogger('tool-manager', { service: 'mcp' });
+    this.logger.info('Tool Manager initialized');
   }
   
   /**
@@ -41,7 +32,10 @@ class ToolManager {
   registerTool(name, implementation, schema = null) {
     try {
       if (this.tools.has(name)) {
-        logger.warn(`Tool ${name} is already registered. Overwriting.`);
+        this.logger.warn(`Tool ${name} is already registered. Overwriting.`, {
+          tool: name,
+          action: 'overwrite'
+        });
       }
       
       // Validate that implementation is a function
@@ -62,10 +56,15 @@ class ToolManager {
       this.metrics.averageExecutionTime[name] = 0;
       this.metrics.totalExecutionTime[name] = 0;
       
-      logger.info(`Tool registered: ${name}`);
+      this.logger.info(`Tool registered: ${name}`, { 
+        tool: name, 
+        action: 'register',
+        hasSchema: !!schema
+      });
+      
       return true;
     } catch (error) {
-      logger.error(`Error registering tool ${name}: ${error.message}`);
+      this.logger.logError(error, `Error registering tool ${name}`);
       return false;
     }
   }
@@ -87,11 +86,20 @@ class ToolManager {
    */
   async executeTool(name, parameters = {}) {
     const startTime = process.hrtime();
+    const traceId = `exec-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
     
     try {
+      this.logger.debug(`Executing tool: ${name}`, { 
+        tool: name, 
+        traceId,
+        parametersKeys: Object.keys(parameters)
+      });
+      
       // Check if tool exists
       if (!this.tools.has(name)) {
-        throw new Error(`Tool not found: ${name}`);
+        const error = new Error(`Tool not found: ${name}`);
+        this.logger.logError(error, `Tool not found: ${name}`, { traceId });
+        throw error;
       }
       
       // Get tool implementation
@@ -99,21 +107,43 @@ class ToolManager {
       
       // Validate parameters against schema if available
       if (this.schemas.has(name)) {
-        this.validateParameters(name, parameters);
+        try {
+          this.validateParameters(name, parameters);
+        } catch (error) {
+          this.logger.logError(error, `Parameter validation failed for tool: ${name}`, { 
+            traceId, 
+            parameters: Object.keys(parameters)
+          });
+          throw error;
+        }
       }
       
       // Execute the tool
+      this.logger.debug(`Running tool implementation: ${name}`, { traceId });
       const result = await tool(parameters);
       
       // Update metrics
-      this.updateMetrics(name, startTime, true);
+      this.updateMetrics(name, startTime, true, traceId);
+      
+      this.logger.debug(`Tool executed successfully: ${name}`, { 
+        traceId,
+        resultType: result ? typeof result : 'null',
+        resultIsArray: Array.isArray(result)
+      });
       
       return result;
     } catch (error) {
       // Update error metrics
-      this.updateMetrics(name, startTime, false);
+      this.updateMetrics(name, startTime, false, traceId, error);
       
-      logger.error(`Error executing tool ${name}: ${error.message}`);
+      this.metrics.lastError[name] = {
+        message: error.message,
+        stack: error.stack,
+        timestamp: new Date(),
+        parameters: Object.keys(parameters)
+      };
+      
+      this.logger.logError(error, `Error executing tool ${name}`, { traceId });
       throw error;
     }
   }
@@ -166,8 +196,10 @@ class ToolManager {
    * @param {string} name - Tool name
    * @param {Array} startTime - Start time from process.hrtime()
    * @param {boolean} success - Whether execution was successful
+   * @param {string} traceId - Trace ID for correlation
+   * @param {Error} error - Error if execution failed
    */
-  updateMetrics(name, startTime, success) {
+  updateMetrics(name, startTime, success, traceId, error = null) {
     const [seconds, nanoseconds] = process.hrtime(startTime);
     const executionTimeMs = (seconds * 1000) + (nanoseconds / 1000000);
     
@@ -188,6 +220,44 @@ class ToolManager {
     this.metrics.totalExecutionTime[name] += executionTimeMs;
     this.metrics.averageExecutionTime[name] = 
       this.metrics.totalExecutionTime[name] / this.metrics.toolUsage[name];
+    
+    // Save last execution info
+    this.metrics.lastExecution[name] = {
+      timestamp: new Date(),
+      executionTimeMs,
+      success,
+      traceId
+    };
+    
+    // Log execution metrics
+    this.logger.logEvent(
+      success ? 'debug' : 'warn',
+      `Tool execution ${success ? 'completed' : 'failed'}: ${name}`,
+      {
+        tool: name,
+        success,
+        traceId,
+        errorMessage: error ? error.message : null
+      },
+      {
+        executionTimeMs,
+        totalExecutions: this.metrics.toolUsage[name],
+        averageExecutionTime: this.metrics.averageExecutionTime[name]
+      }
+    );
+    
+    // Try to update Prometheus metrics if health module is loaded
+    try {
+      const { metrics } = require('../routes/health');
+      if (metrics && metrics.toolUsage) {
+        metrics.toolUsage.inc({ 
+          tool: name, 
+          status: success ? 'success' : 'error' 
+        });
+      }
+    } catch (e) {
+      // Health module not loaded yet, ignore
+    }
   }
   
   /**
@@ -217,6 +287,30 @@ class ToolManager {
       successRate: this.metrics.executions > 0 
         ? ((this.metrics.executions - this.metrics.errors) / this.metrics.executions) * 100 
         : 100,
+      registeredTools: this.getRegisteredTools(),
+      toolCount: this.tools.size,
+      timestamp: new Date()
+    };
+  }
+  
+  /**
+   * Get execution history for a specific tool
+   * @param {string} name - Tool name 
+   * @returns {Object} Tool execution history and metrics
+   */
+  getToolMetrics(name) {
+    if (!this.tools.has(name)) {
+      return null;
+    }
+    
+    return {
+      name,
+      usage: this.metrics.toolUsage[name] || 0,
+      averageExecutionTime: this.metrics.averageExecutionTime[name] || 0,
+      totalExecutionTime: this.metrics.totalExecutionTime[name] || 0,
+      lastExecution: this.metrics.lastExecution[name] || null,
+      lastError: this.metrics.lastError[name] || null,
+      hasSchema: this.schemas.has(name)
     };
   }
   
@@ -230,6 +324,8 @@ class ToolManager {
       toolUsage: {},
       averageExecutionTime: {},
       totalExecutionTime: {},
+      lastExecution: {},
+      lastError: {}
     };
     
     // Re-initialize tool-specific metrics
@@ -238,6 +334,8 @@ class ToolManager {
       this.metrics.averageExecutionTime[name] = 0;
       this.metrics.totalExecutionTime[name] = 0;
     }
+    
+    this.logger.info('Tool metrics cleared');
   }
   
   /**
@@ -309,4 +407,4 @@ class ToolManager {
   }
 }
 
-module.exports = ToolManager;
+module.exports = new ToolManager();

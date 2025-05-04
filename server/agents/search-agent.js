@@ -1,6 +1,9 @@
 /**
  * Search Agent for handling hotel searches
  */
+const logger = require('../services/logging-service').getLogger('search-agent');
+const { metrics } = require('../routes/health');
+
 class SearchAgent {
   constructor(llmProvider, searchService) {
     this.llmProvider = llmProvider;
@@ -8,6 +11,26 @@ class SearchAgent {
     this.isInitialized = false;
     this.searchCache = new Map();
     this.cacheTTL = 3600000; // 1 hour in milliseconds
+    this.logger = logger.createChildLogger('search-agent', { agent: 'search' });
+    
+    // Add diagnostic information
+    this.diagnostics = {
+      lastError: null,
+      lastSearchParams: null,
+      lastQuery: null,
+      searchAttempts: 0,
+      searchSuccess: 0,
+      searchErrors: 0,
+      llmErrors: 0,
+      serviceErrors: 0
+    };
+    
+    this.logger.info('Search agent created', {
+      hasDependencies: {
+        llmProvider: !!llmProvider,
+        searchService: !!searchService
+      }
+    });
   }
   
   /**
@@ -15,10 +38,30 @@ class SearchAgent {
    */
   async initialize() {
     try {
+      this.logger.info('Initializing search agent');
+      
+      // Check if LLM provider is available
+      if (!this.llmProvider) {
+        throw new Error('LLM provider is not available');
+      }
+      
+      // Check if search service is available
+      if (!this.searchService) {
+        throw new Error('Search service is not available');
+      }
+      
+      // Verify search service has required methods
+      const requiredMethods = ['search', 'getHotelReviews'];
+      for (const method of requiredMethods) {
+        if (typeof this.searchService[method] !== 'function') {
+          throw new Error(`Search service is missing required method: ${method}`);
+        }
+      }
+      
       this.isInitialized = true;
-      console.log('Search agent initialized');
+      this.logger.info('Search agent initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize search agent:', error);
+      this.logger.logError(error, 'Failed to initialize search agent');
       throw error;
     }
   }
@@ -30,7 +73,25 @@ class SearchAgent {
    * @returns {Object} Search results
    */
   async searchHotels(query, filters = {}) {
+    const searchId = `search_${Date.now()}`;
+    const startTime = Date.now();
+    
+    // Update diagnostics
+    this.diagnostics.searchAttempts++;
+    this.diagnostics.lastQuery = query;
+    
+    this.logger.info('Starting hotel search', { 
+      searchId, 
+      query, 
+      filterCount: Object.keys(filters).length 
+    });
+    
     try {
+      if (!this.isInitialized) {
+        this.logger.warn('Search agent not initialized, attempting to initialize', { searchId });
+        await this.initialize();
+      }
+      
       // Generate cache key
       const cacheKey = this.generateCacheKey(query, filters);
       
@@ -38,21 +99,152 @@ class SearchAgent {
       if (this.searchCache.has(cacheKey)) {
         const cachedResult = this.searchCache.get(cacheKey);
         if (Date.now() - cachedResult.timestamp < this.cacheTTL) {
+          this.logger.debug('Returning cached search results', { 
+            searchId,
+            cacheKey, 
+            age: Date.now() - cachedResult.timestamp 
+          });
+          
+          // Attempt to update metrics
+          try {
+            metrics.searchRequests.inc({ source: 'cache', status: 'success' });
+            
+            // Update cache hit ratio
+            const cacheHitRatio = this.calculateCacheHitRatio();
+            metrics.cacheHitRatio.set({}, cacheHitRatio);
+          } catch (e) {
+            // Metrics not available, ignore
+          }
+          
+          this.diagnostics.searchSuccess++;
+          
           return {
             ...cachedResult.data,
             source: 'cache',
-            originalTimestamp: cachedResult.timestamp
+            originalTimestamp: cachedResult.timestamp,
+            searchId
           };
         }
       }
       
       // Extract search parameters from natural language query
+      this.logger.debug('Extracting search parameters', { searchId });
       const searchParams = await this.extractSearchParameters(query, filters);
       
+      // Check if we have a location to search for
+      if (!searchParams.location && !searchParams.query) {
+        this.logger.warn('No location found in search query', { searchId, query });
+        
+        // Attempt to update metrics
+        try {
+          metrics.searchErrors.inc({ source: 'extraction', code: 'no_location' });
+        } catch (e) {
+          // Metrics not available, ignore
+        }
+        
+        return {
+          error: true,
+          message: 'No location specified in search query',
+          searchId,
+          query,
+          timestamp: new Date()
+        };
+      }
+      
       // Perform the actual search using the search service
-      const results = await this.searchService.search(searchParams);
+      this.logger.debug('Performing search with service', { 
+        searchId, 
+        params: searchParams 
+      });
+      
+      // Attempt to update metrics
+      try {
+        metrics.searchRequests.inc({ source: 'api', status: 'pending' });
+      } catch (e) {
+        // Metrics not available, ignore
+      }
+      
+      const searchStart = process.hrtime();
+      
+      // Check if search service is available
+      if (!this.searchService) {
+        this.logger.error('Search service not available', { searchId });
+        throw new Error('Search service not available');
+      }
+      
+      // Check if search service has search method
+      if (typeof this.searchService.search !== 'function') {
+        this.logger.error('Search service missing search method', { searchId });
+        throw new Error('Search service missing search method');
+      }
+      
+      // Execute the search
+      let results;
+      try {
+        results = await this.searchService.search(searchParams);
+      } catch (error) {
+        this.logger.logError(error, 'Error from search service', {
+          searchId,
+          searchParams
+        });
+        
+        this.diagnostics.serviceErrors++;
+        
+        // Attempt to update metrics
+        try {
+          const [seconds, nanoseconds] = process.hrtime(searchStart);
+          const searchLatencyMs = (seconds * 1000) + (nanoseconds / 1000000);
+          
+          metrics.searchLatency.observe({ source: 'api', type: 'failed' }, searchLatencyMs / 1000);
+          metrics.searchRequests.inc({ source: 'api', status: 'error' });
+          metrics.searchErrors.inc({ source: 'api', code: error.code || 'unknown' });
+        } catch (e) {
+          // Metrics not available, ignore
+        }
+        
+        throw error;
+      }
+      
+      // Calculate search latency
+      const [seconds, nanoseconds] = process.hrtime(searchStart);
+      const searchLatencyMs = (seconds * 1000) + (nanoseconds / 1000000);
+      
+      this.logger.debug('Search service response received', {
+        searchId,
+        latencyMs: searchLatencyMs,
+        resultCount: results?.hotels?.length || 0
+      });
+      
+      // Attempt to update metrics
+      try {
+        metrics.searchLatency.observe({ source: 'api', type: 'success' }, searchLatencyMs / 1000);
+        metrics.searchRequests.inc({ source: 'api', status: 'success' });
+      } catch (e) {
+        // Metrics not available, ignore
+      }
+      
+      if (!results) {
+        this.logger.error('Search service returned null results', { searchId });
+        throw new Error('Search service returned null results');
+      }
+      
+      if (!results.hotels) {
+        this.logger.warn('Search results missing hotels array', { 
+          searchId, 
+          resultKeys: Object.keys(results) 
+        });
+        
+        // Add empty hotels array if missing
+        results.hotels = [];
+      }
+      
+      this.logger.debug('Search completed', { 
+        searchId,
+        hotelCount: results.hotels.length 
+      });
       
       // Enhance results with additional information
+      this.logger.debug('Enhancing search results', { searchId });
       const enhancedResults = await this.enhanceResults(results, searchParams);
       
       // Cache the results
@@ -61,10 +253,55 @@ class SearchAgent {
         data: enhancedResults
       });
       
-      return enhancedResults;
+      const duration = Date.now() - startTime;
+      this.logger.logEvent('info', 'Hotel search completed', {
+        searchId,
+        query,
+        filters: Object.keys(filters),
+        resultsCount: enhancedResults.hotels?.length || 0,
+        location: searchParams.location
+      }, {
+        duration,
+        cacheSize: this.searchCache.size,
+        searchLatencyMs
+      });
+      
+      // Update diagnostics
+      this.diagnostics.searchSuccess++;
+      
+      // Add searchId to results
+      return {
+        ...enhancedResults,
+        searchId
+      };
     } catch (error) {
-      console.error('Error searching hotels:', error);
-      throw error;
+      const duration = Date.now() - startTime;
+      
+      this.logger.logError(error, 'Error searching hotels', { 
+        searchId,
+        query, 
+        filters,
+        duration
+      });
+      
+      // Update diagnostics
+      this.diagnostics.searchErrors++;
+      this.diagnostics.lastError = {
+        message: error.message,
+        stack: error.stack,
+        timestamp: new Date(),
+        query,
+        searchId
+      };
+      
+      // Return error response
+      return {
+        error: true,
+        message: error.message,
+        searchId,
+        query,
+        timestamp: new Date()
+      };
     }
   }
   
@@ -75,7 +312,22 @@ class SearchAgent {
    * @returns {Object} Structured search parameters
    */
   async extractSearchParameters(query, explicitFilters = {}) {
-    const prompt = `
+    const searchId = `search_${Date.now()}`;
+    this.logger.info('Extracting search parameters', { query, searchId });
+    
+    try {
+      if (!this.llmProvider) {
+        this.logger.error('LLM provider not initialized', { searchId });
+        
+        // Fall back to basic extraction
+        this.logger.info('Falling back to basic parameter extraction', { searchId });
+        return {
+          query,
+          ...explicitFilters
+        };
+      }
+      
+      const prompt = `
 Extract search parameters from this hotel search query:
 "${query}"
 
@@ -112,34 +364,97 @@ Format your response as a JSON object with these fields:
 
 Only include fields where you have extracted specific information from the query.
 `;
-    
-    const response = await this.llmProvider.generateResponse(prompt, {
-      temperature: 0.2,
-      max_tokens: 800
-    });
-    
-    try {
-      // Extract JSON from response
-      const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || 
-                       response.match(/{[\s\S]*}/);
       
-      const jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : response;
-      const params = JSON.parse(jsonString);
+      this.logger.debug('Sending prompt to LLM', { searchId, promptLength: prompt.length });
       
-      // Merge with explicit filters (explicit filters take precedence)
-      return {
-        ...params,
-        filters: {
-          ...(params.filters || {}),
-          ...(explicitFilters.filters || {})
-        },
-        ...explicitFilters
-      };
+      // Record LLM start time for metrics
+      const llmStart = process.hrtime();
+      
+      const response = await this.llmProvider.generateResponse(prompt, {
+        temperature: 0.2,
+        max_tokens: 800
+      });
+      
+      // Calculate LLM latency
+      const [seconds, nanoseconds] = process.hrtime(llmStart);
+      const llmLatencyMs = (seconds * 1000) + (nanoseconds / 1000000);
+      
+      this.logger.debug('LLM response received', { 
+        searchId, 
+        responseLength: response?.length || 0,
+        llmLatencyMs
+      });
+      
+      try {
+        // Extract JSON from response
+        const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || 
+                         response.match(/{[\s\S]*}/);
+        
+        if (!jsonMatch) {
+          this.logger.warn('No JSON found in LLM response', { searchId, response });
+          throw new Error('No JSON found in LLM response');
+        }
+        
+        const jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : response;
+        
+        this.logger.debug('Extracted JSON', { searchId, jsonString });
+        
+        const params = JSON.parse(jsonString);
+        
+        this.logger.info('Parameters extracted successfully', { 
+          searchId, 
+          location: params.location,
+          hasFilters: !!params.filters
+        });
+        
+        // Store for diagnostics
+        this.diagnostics.lastSearchParams = params;
+        
+        // Merge with explicit filters (explicit filters take precedence)
+        const mergedParams = {
+          ...params,
+          filters: {
+            ...(params.filters || {}),
+            ...(explicitFilters.filters || {})
+          },
+          ...explicitFilters
+        };
+        
+        // Attempt to update metrics
+        try {
+          metrics.searchLatency.observe({ source: 'llm', type: 'extraction' }, llmLatencyMs / 1000);
+        } catch (e) {
+          // Metrics not available, ignore
+        }
+        
+        return mergedParams;
+      } catch (error) {
+        this.logger.logError(error, 'Error parsing search parameters', { 
+          searchId, 
+          response: response?.substring(0, 100)
+        });
+        
+        this.diagnostics.llmErrors++;
+        
+        // Return basic parameters when parsing fails
+        return {
+          query,
+          error: 'Failed to parse parameters',
+          ...explicitFilters
+        };
+      }
     } catch (error) {
-      console.error('Error parsing search parameters:', error);
-      // Return basic parameters when parsing fails
+      this.logger.logError(error, 'Error extracting search parameters', { 
+        searchId,
+        query
+      });
+      
+      this.diagnostics.llmErrors++;
+      
+      // Return basic parameters when extraction fails
       return {
         query,
+        error: 'Parameter extraction failed',
         ...explicitFilters
       };
     }
@@ -358,14 +673,72 @@ Keep your summary concise and balanced.
   }
   
   /**
+   * Calculate cache hit ratio
+   * @returns {number} Cache hit ratio (0-1)
+   */
+  calculateCacheHitRatio() {
+    return this.diagnostics.searchSuccess > 0 
+      ? (this.diagnostics.searchSuccess - this.diagnostics.searchErrors) / this.diagnostics.searchSuccess 
+      : 0;
+  }
+  
+  /**
    * Get agent status
    */
   getStatus() {
     return {
       initialized: this.isInitialized,
       cacheSize: this.searchCache.size,
-      cacheTTL: this.cacheTTL
+      cacheTTL: this.cacheTTL,
+      llmProviderAvailable: !!this.llmProvider,
+      searchServiceAvailable: !!this.searchService,
+      searchServiceStatus: this.searchService?.getStatus ? this.searchService.getStatus() : 'unknown',
+      diagnostics: {
+        searchAttempts: this.diagnostics.searchAttempts,
+        searchSuccess: this.diagnostics.searchSuccess,
+        searchErrors: this.diagnostics.searchErrors,
+        llmErrors: this.diagnostics.llmErrors,
+        serviceErrors: this.diagnostics.serviceErrors,
+        lastError: this.diagnostics.lastError ? {
+          message: this.diagnostics.lastError.message,
+          timestamp: this.diagnostics.lastError.timestamp,
+          query: this.diagnostics.lastError.query
+        } : null
+      }
     };
+  }
+  
+  /**
+   * Health check for search agent
+   * @returns {Object} Health check results
+   */
+  async healthCheck() {
+    try {
+      const status = this.getStatus();
+      
+      // Test search with a simple query
+      let searchWorking = false;
+      try {
+        const testResults = await this.searchHotels('test hotel in New York', { limit: 1 });
+        searchWorking = testResults && testResults.hotels && testResults.hotels.length > 0;
+      } catch (error) {
+        this.logger.error('Health check search test failed', { error: error.message });
+      }
+      
+      return {
+        ...status,
+        healthy: this.isInitialized && searchWorking,
+        searchWorking,
+        timestamp: new Date()
+      };
+    } catch (error) {
+      this.logger.logError(error, 'Error performing health check');
+      return {
+        healthy: false,
+        error: error.message,
+        timestamp: new Date()
+      };
+    }
   }
 }
 

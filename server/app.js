@@ -24,6 +24,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const analyticsRoutes = require('./routes/analytics');
 const adminRoutes = require('./routes/admin');
+const healthRoutes = require('./routes/health').router;
 
 // Import WebSocket handler
 const websocketHandler = require('./websocket/handler');
@@ -317,6 +318,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/health', healthRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

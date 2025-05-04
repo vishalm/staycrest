@@ -1,19 +1,6 @@
 const axios = require('axios');
-const winston = require('winston');
 const LoyaltyWebsiteManager = require('./loyalty-website-manager');
-
-// Configure logger
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console(),
-    new winston.transports.File({ filename: 'logs/web-search.log' })
-  ],
-});
+const logger = require('./logging-service').getLogger('web-search');
 
 /**
  * Web Search Service - Handles external web searches and hotel aggregation
@@ -32,6 +19,16 @@ class WebSearchService {
     this.maxCacheAge = 3600000; // 1 hour
     this.searchCache = new Map();
     this.isInitialized = false;
+    this.logger = logger.createChildLogger('web-search', { service: 'web-search' });
+    
+    // Log API keys status (not the actual keys)
+    this.logger.debug('API keys configuration', {
+      google: !!this.apiKeys.google,
+      bing: !!this.apiKeys.bing,
+      serp: !!this.apiKeys.serp,
+      rapid: !!this.apiKeys.rapid,
+      googleCSE: !!this.customSearchEngineId
+    });
   }
   
   /**
@@ -39,17 +36,23 @@ class WebSearchService {
    */
   async initialize() {
     try {
+      this.logger.info('Initializing web search service');
+      
       // Initialize loyalty website manager
       await this.loyaltyManager.initialize();
+      this.logger.debug('Loyalty manager initialized');
       
       // Test search APIs
-      await this.validateSearchAPIs();
+      const validationResults = await this.validateSearchAPIs();
+      this.logger.info('Search APIs validation completed', { validationResults });
       
       this.isInitialized = true;
-      logger.info('Web search service initialized');
+      this.logger.info('Web search service initialized successfully');
+      return true;
     } catch (error) {
-      logger.error(`Failed to initialize web search service: ${error.message}`);
+      this.logger.logError(error, 'Failed to initialize web search service');
       // Continue even if initialization fails
+      return false;
     }
   }
   
@@ -62,17 +65,42 @@ class WebSearchService {
     // Test Google Custom Search API if configured
     if (this.apiKeys.google && this.customSearchEngineId) {
       try {
+        this.logger.debug('Testing Google Search API');
         await axios.get(
           `https://www.googleapis.com/customsearch/v1?key=${this.apiKeys.google}&cx=${this.customSearchEngineId}&q=test`
         );
         validationResults.google = true;
+        this.logger.debug('Google Search API validation successful');
       } catch (error) {
-        logger.warn(`Google Search API validation failed: ${error.message}`);
+        this.logger.logError(error, 'Google Search API validation failed');
         validationResults.google = false;
       }
+    } else {
+      this.logger.warn('Google Search API not configured', {
+        hasApiKey: !!this.apiKeys.google,
+        hasCSEId: !!this.customSearchEngineId
+      });
+      validationResults.google = false;
     }
     
-    // Test other search APIs as needed
+    // Test Bing Search API if configured
+    if (this.apiKeys.bing) {
+      try {
+        this.logger.debug('Testing Bing Search API');
+        await axios.get('https://api.bing.microsoft.com/v7.0/search', {
+          params: { q: 'test', count: 1 },
+          headers: { 'Ocp-Apim-Subscription-Key': this.apiKeys.bing }
+        });
+        validationResults.bing = true;
+        this.logger.debug('Bing Search API validation successful');
+      } catch (error) {
+        this.logger.logError(error, 'Bing Search API validation failed');
+        validationResults.bing = false;
+      }
+    } else {
+      this.logger.warn('Bing Search API not configured');
+      validationResults.bing = false;
+    }
     
     return validationResults;
   }
@@ -84,57 +112,104 @@ class WebSearchService {
    * @returns {Promise<Object>} Search results
    */
   async search(query, options = {}) {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
+    const startTime = Date.now();
     
-    const searchOptions = {
-      limit: options.limit || 10,
-      type: options.type || 'web',
-      freshness: options.freshness || null,
-      source: options.source || 'google',
-      filter: options.filter || null,
-      ...options
-    };
-    
-    // Generate cache key
-    const cacheKey = this.generateCacheKey(query, searchOptions);
-    
-    // Check cache
-    if (this.searchCache.has(cacheKey)) {
-      const cachedResult = this.searchCache.get(cacheKey);
-      if (Date.now() - cachedResult.timestamp < this.maxCacheAge) {
-        logger.debug(`Cache hit for query: ${query}`);
-        return {
-          ...cachedResult.data,
-          fromCache: true
-        };
+    try {
+      this.logger.info('Performing search', { query, options });
+      
+      if (!this.isInitialized) {
+        this.logger.warn('Service not initialized, attempting to initialize');
+        await this.initialize();
       }
+      
+      const searchOptions = {
+        limit: options.limit || 10,
+        type: options.type || 'web',
+        freshness: options.freshness || null,
+        source: options.source || 'google',
+        filter: options.filter || null,
+        ...options
+      };
+      
+      // Generate cache key
+      const cacheKey = this.generateCacheKey(query, searchOptions);
+      
+      // Check cache
+      if (this.searchCache.has(cacheKey)) {
+        const cachedResult = this.searchCache.get(cacheKey);
+        if (Date.now() - cachedResult.timestamp < this.maxCacheAge) {
+          this.logger.debug('Cache hit for query', { query });
+          
+          // Log metrics for cached response
+          this.logger.logEvent('info', 'Search cache hit', {
+            query,
+            source: searchOptions.source,
+            cacheAge: Date.now() - cachedResult.timestamp
+          }, {
+            responseTime: Date.now() - startTime,
+            cacheHit: true
+          });
+          
+          return {
+            ...cachedResult.data,
+            fromCache: true
+          };
+        }
+      }
+      
+      // Execute search based on selected source
+      this.logger.debug('Cache miss, executing search', { 
+        source: searchOptions.source 
+      });
+      
+      let results;
+      switch (searchOptions.source) {
+        case 'google':
+          results = await this.searchGoogle(query, searchOptions);
+          break;
+        case 'bing':
+          results = await this.searchBing(query, searchOptions);
+          break;
+        case 'hotels':
+          results = await this.searchHotels(query, searchOptions);
+          break;
+        default:
+          this.logger.warn('Unknown search source, falling back to Google', {
+            requestedSource: searchOptions.source
+          });
+          results = await this.searchGoogle(query, searchOptions);
+      }
+      
+      // Cache results
+      this.searchCache.set(cacheKey, {
+        timestamp: Date.now(),
+        data: results
+      });
+      
+      const duration = Date.now() - startTime;
+      
+      // Log search metrics
+      this.logger.logEvent('info', 'Search completed', {
+        query,
+        source: searchOptions.source,
+        resultCount: results.results?.length || 0
+      }, {
+        responseTime: duration,
+        cacheHit: false
+      });
+      
+      return results;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      
+      this.logger.logError(error, 'Error in search', {
+        query,
+        options,
+        duration
+      });
+      
+      throw error;
     }
-    
-    // Execute search based on selected source
-    let results;
-    switch (searchOptions.source) {
-      case 'google':
-        results = await this.searchGoogle(query, searchOptions);
-        break;
-      case 'bing':
-        results = await this.searchBing(query, searchOptions);
-        break;
-      case 'hotels':
-        results = await this.searchHotels(query, searchOptions);
-        break;
-      default:
-        results = await this.searchGoogle(query, searchOptions);
-    }
-    
-    // Cache results
-    this.searchCache.set(cacheKey, {
-      timestamp: Date.now(),
-      data: results
-    });
-    
-    return results;
   }
   
   /**
@@ -144,9 +219,18 @@ class WebSearchService {
    * @returns {Promise<Object>} Search results
    */
   async searchGoogle(query, options) {
+    const startTime = Date.now();
+    
     try {
+      this.logger.debug('Executing Google search', { query });
+      
       if (!this.apiKeys.google || !this.customSearchEngineId) {
-        throw new Error('Google Search API is not configured');
+        const error = new Error('Google Search API is not configured');
+        this.logger.error('Google Search API configuration missing', {
+          hasApiKey: !!this.apiKeys.google,
+          hasCSEId: !!this.customSearchEngineId
+        });
+        throw error;
       }
       
       const params = {
@@ -161,17 +245,34 @@ class WebSearchService {
         params.dateRestrict = options.freshness;
       }
       
+      this.logger.debug('Calling Google API', { params: {...params, key: '[REDACTED]'} });
       const response = await axios.get('https://www.googleapis.com/customsearch/v1', { params });
+      
+      this.logger.debug('Google API response received', {
+        status: response.status,
+        itemCount: response.data.items?.length || 0
+      });
+      
+      const parsedResults = this.parseGoogleResults(response.data);
+      
+      // Log metrics
+      const duration = Date.now() - startTime;
+      this.logger.logEvent('debug', 'Google search completed', {
+        query,
+        resultCount: parsedResults.length
+      }, {
+        responseTime: duration
+      });
       
       return {
         source: 'google',
-        results: this.parseGoogleResults(response.data),
+        results: parsedResults,
         totalResults: response.data.searchInformation?.totalResults,
         searchTime: response.data.searchInformation?.searchTime,
         timestamp: new Date()
       };
     } catch (error) {
-      logger.error(`Google search error: ${error.message}`);
+      this.logger.logError(error, 'Google search error');
       throw error;
     }
   }
@@ -339,10 +440,20 @@ class WebSearchService {
    * @returns {Object} Service status
    */
   getStatus() {
+    const supportedSources = this.getSupportedSources();
+    
     return {
       initialized: this.isInitialized,
       cacheSize: this.searchCache.size,
-      supportedSources: this.getSupportedSources(),
+      supportedSources,
+      apis: {
+        google: !!this.apiKeys.google && !!this.customSearchEngineId,
+        bing: !!this.apiKeys.bing,
+        serp: !!this.apiKeys.serp,
+        rapid: !!this.apiKeys.rapid
+      },
+      loyaltyManager: this.loyaltyManager?.isInitialized || false,
+      loyaltySources: this.loyaltyManager?.getEnabledSources().length || 0
     };
   }
   
@@ -366,6 +477,74 @@ class WebSearchService {
     }
     
     return sources;
+  }
+  
+  /**
+   * Health check for the service
+   * @returns {Promise<Object>} Health status
+   */
+  async healthCheck() {
+    try {
+      const status = this.getStatus();
+      
+      // Test a simple search to validate functionality
+      let searchWorking = false;
+      let googleWorking = false;
+      let bingWorking = false;
+      let hotelSearchWorking = false;
+      
+      try {
+        // Test Google search
+        if (status.apis.google) {
+          const googleResults = await this.searchGoogle('test', { limit: 1 });
+          googleWorking = googleResults && googleResults.results && googleResults.results.length > 0;
+        }
+      } catch (error) {
+        this.logger.error('Google search health check failed', { error: error.message });
+      }
+      
+      try {
+        // Test Bing search
+        if (status.apis.bing) {
+          const bingResults = await this.searchBing('test', { limit: 1 });
+          bingWorking = bingResults && bingResults.results && bingResults.results.length > 0;
+        }
+      } catch (error) {
+        this.logger.error('Bing search health check failed', { error: error.message });
+      }
+      
+      try {
+        // Test hotel search if loyalty manager is initialized
+        if (this.loyaltyManager && this.loyaltyManager.isInitialized) {
+          const hotelResults = await this.searchHotels('hotel in New York', {});
+          hotelSearchWorking = hotelResults && hotelResults.results;
+        }
+      } catch (error) {
+        this.logger.error('Hotel search health check failed', { error: error.message });
+      }
+      
+      // Overall search functionality is working if any of the search methods is working
+      searchWorking = googleWorking || bingWorking || hotelSearchWorking;
+      
+      return {
+        ...status,
+        healthy: this.isInitialized && searchWorking,
+        searchWorking,
+        searchEngines: {
+          google: googleWorking,
+          bing: bingWorking,
+          hotels: hotelSearchWorking
+        },
+        timestamp: new Date()
+      };
+    } catch (error) {
+      this.logger.logError(error, 'Error performing health check');
+      return {
+        healthy: false,
+        error: error.message,
+        timestamp: new Date()
+      };
+    }
   }
 }
 
