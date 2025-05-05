@@ -4,11 +4,8 @@ services:
   # Application Service
   app:
     build:
-      context: ./app
-      dockerfile: Dockerfile
-      platforms:
-        - linux/amd64
-        - linux/arm64
+      context: .
+      dockerfile: app/Dockerfile
     container_name: staycrest-app
     restart: unless-stopped
     ports:
@@ -19,6 +16,7 @@ services:
       - PORT=3000
       - MONGODB_URI=mongodb://mongodb:27017/staycrest
       - REDIS_URI=redis://redis:6379
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/staycrest
       - JWT_SECRET=development_jwt_secret
       - JWT_EXPIRES_IN=1d
       - JWT_REFRESH_EXPIRES_IN=7
@@ -31,7 +29,20 @@ services:
       - ENABLE_TRACING=true
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
     volumes:
-      - ./:/app
+      - ./app/server:/app/server
+      - ./app/package.json:/app/package.json
+      - ./index.html:/app/index.html
+      - ./admin.html:/app/admin.html
+      - ./admin-login.html:/app/admin-login.html
+      - ./test.html:/app/test.html
+      - ./full-test.html:/app/full-test.html
+      - ./html-check.html:/app/html-check.html
+      - ./css:/app/css
+      - ./js:/app/js
+      - ./assets:/app/assets
+      - ./app/logs:/app/logs
+      - ./app/uploads:/app/uploads
+      - ./app/cache:/app/cache
       - /app/node_modules
     depends_on:
       - mongodb
@@ -65,15 +76,16 @@ services:
     volumes:
       - mongodb_data:/data/db
       - ./monitoring/mongo-init:/docker-entrypoint-initdb.d
+      - ./config/mongodb-keyfile:/etc/mongodb-keyfile
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=admin123
       - MONGO_INITDB_DATABASE=staycrest
-    command: ["--auth", "--replSet", "rs0"]
+    command: ["mongod", "--auth", "--replSet", "rs0", "--keyFile", "/etc/mongodb-keyfile"]
     networks:
       - staycrest-network
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -86,10 +98,12 @@ services:
     depends_on:
       - mongodb
     restart: on-failure
+    volumes:
+      - ./config/mongodb-keyfile:/etc/mongodb-keyfile
     entrypoint: >
       bash -c "
         sleep 10 &&
-        mongo mongodb://admin:admin123@mongodb:27017/admin --eval \"
+        mongosh mongodb://admin:admin123@mongodb:27017/admin --eval \"
           rs.initiate({
             _id: 'rs0',
             members: [{ _id: 0, host: 'mongodb:27017' }]
@@ -300,7 +314,9 @@ services:
     container_name: staycrest-connection-pool
     restart: unless-stopped
     volumes:
-      - ./config/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - type: bind
+        source: ./config/haproxy/haproxy.cfg
+        target: /usr/local/etc/haproxy/haproxy.cfg
     ports:
       - "27117:27117"
       - "8404:8404"  # Stats port
